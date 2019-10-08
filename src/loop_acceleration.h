@@ -21,8 +21,5 @@ namespace loop_acc {
 class acceleratort;
 
 void print_help();
-void parse_input(int argc,
-		char **argv,
-		std::string &in_irfile,
-		std::string &out_gbfile);
+void parse_input(int argc, char **argv, std::string&, std::string&);
 }
