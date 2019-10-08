@@ -44,7 +44,7 @@ all: loop_acceleration
 loop_acceleration: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	g++ -L"/home/akash/Documents/CBMC/cbmc/src" -o "loop_acceleration" $(OBJS) $(USER_OBJS) $(LIBS)
+	g++ -L${CBMC_SRC} -o "loop_acceleration" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
