@@ -1,5 +1,8 @@
 # Project files
 Debug/loop_acceleration
+.cproject
+.project
+.settings
 
 # IR files
 *.ll
