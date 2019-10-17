@@ -1,7 +1,4 @@
 # Project files
-.cproject
-.project
-.settings
 
 # IR files
 *.ll
