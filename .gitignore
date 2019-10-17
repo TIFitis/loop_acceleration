@@ -1,4 +1,5 @@
 # Project files
+Debug/loop_acceleration
 
 # IR files
 *.ll
