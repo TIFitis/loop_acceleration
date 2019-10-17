@@ -11,15 +11,17 @@
 
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
-
+	std::vector<goto_programt::targett> get_loops();
 public:
 	acceleratort(goto_modelt &goto_model) :
 			goto_model(goto_model) {
 	}
 	bool accelerate();
 	bool write_binary(std::string out_file) {
-		messaget mh;
-		return write_goto_binary(out_file, goto_model, mh.get_message_handler());
+		cmdlinet c;
+		std::string program = "";
+		ui_message_handlert a(c, program);
+		return write_goto_binary(out_file, goto_model, a);
 	}
 };
 
