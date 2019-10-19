@@ -4,10 +4,11 @@
  *  Created on: 07-Oct-2019
  *      Author: Akash
  */
-#include<string>
-#include<ostream>
-#include<iostream>
-#include<vector>
+#include <string>
+#include <ostream>
+#include <iostream>
+#include <vector>
+#include <map>
 
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>

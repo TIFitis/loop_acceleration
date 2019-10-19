@@ -11,7 +11,8 @@
 
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
-	std::vector<goto_programt::targett> get_loops();
+	std::map<goto_programt*, natural_loops_mutablet*> loops;
+	void get_loops();
 public:
 	acceleratort(goto_modelt &goto_model) :
 			goto_model(goto_model) {
