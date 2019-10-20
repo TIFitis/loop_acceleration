@@ -12,7 +12,14 @@
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
 	std::map<goto_programt*, natural_loops_mutablet*> loops;
+
+	void accelerate_all_functions();
+	void accelerate_all_loops(goto_programt&);
+	void accelerate_loop(goto_programt::targett&,
+			natural_loops_mutablet::natural_loopt&,
+			goto_programt&);
 	void get_loops();
+
 public:
 	acceleratort(goto_modelt &goto_model) :
 			goto_model(goto_model) {
