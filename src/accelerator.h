@@ -9,6 +9,8 @@
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
 
+typedef std::unordered_set<exprt, irep_hash> expr_sett;
+
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
 	std::map<goto_programt*, natural_loops_mutablet*> loops;
@@ -23,9 +25,9 @@ class loop_acc::acceleratort {
 			goto_programt&);
 	void get_all_sources(exprt,
 			goto_programt::instructionst&,
-			std::list<exprt>&,
+			expr_sett&,
 			goto_programt::instructionst&);
-	std::list<exprt> gather_syms(exprt);
+	expr_sett gather_syms(exprt);
 	void get_loops();
 
 public:

@@ -62,17 +62,17 @@ goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header
 	return dup_body;
 }
 
-list<exprt> acceleratort::gather_syms(exprt expr) {
-	list<exprt> expr_syms;
+expr_sett acceleratort::gather_syms(exprt expr) {
+	expr_sett expr_syms;
 	if (expr.id() == ID_symbol)
-		expr_syms.push_back(expr);
+		expr_syms.insert(expr);
 	else if (expr.id() == ID_index || expr.id() == ID_member
 			|| expr.id() == ID_dereference)
 		assert(false && "Not Handled type");
 	else {
 		forall_operands(it, expr) {
 			for (auto a : gather_syms(*it))
-				expr_syms.push_back(a);
+				expr_syms.insert(a);
 		}
 	}
 	return expr_syms;
@@ -80,8 +80,8 @@ list<exprt> acceleratort::gather_syms(exprt expr) {
 
 void acceleratort::get_all_sources(exprt tgt,
 		goto_programt::instructionst &assign_insts,
-		list<exprt> &src_syms,
-		goto_programt::instructionst &sliced_assign_insts) {
+		expr_sett &src_syms,
+		goto_programt::instructionst &clustered_asgn_insts) {
 	src_syms = gather_syms(tgt);
 
 	for (goto_programt::instructionst::reverse_iterator r_it =
@@ -90,15 +90,15 @@ void acceleratort::get_all_sources(exprt tgt,
 			auto assignment = to_code_assign(r_it->code);
 			auto lhs_syms = gather_syms(assignment.lhs());
 
-			if (assignment.lhs().id() == ID_symbol) src_syms.push_back(tgt);
+			if (assignment.lhs().id() == ID_symbol) src_syms.insert(tgt);
 
 			for (auto s_it : lhs_syms) {
 				if (find(src_syms.begin(), src_syms.end(), s_it)
 						!= src_syms.end()) {
-					sliced_assign_insts.push_front(*r_it);
-					src_syms.remove(assignment.lhs());
+					clustered_asgn_insts.push_front(*r_it);
+					src_syms.erase(assignment.lhs());
 					for (auto a : gather_syms(assignment.rhs()))
-						src_syms.push_back(a);
+						src_syms.insert(a);
 					break;
 				}
 			}
@@ -114,27 +114,35 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 //	cout << "After\n==============================\n";
 //	dup_body.output(cout);
 	goto_programt::instructionst assign_insts;
-	list<exprt> assign_tgts;
+	expr_sett assign_tgts;
 	for (auto inst_it = dup_body.instructions.begin(), inst_end =
 			dup_body.instructions.end(); inst_it != inst_end;
 			inst_it++, dup_body_iter++) {
 		if (inst_it->is_assign()) {
 			assign_insts.push_back(*inst_it);
 			auto &x = to_code_assign(inst_it->code);
-			assign_tgts.push_back(x.lhs());
+			assign_tgts.insert(x.lhs());
 		}
 	}
+	expr_sett non_recursive_tgts;
 	for (auto tgt : assign_tgts) {
 		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
-		list<exprt> src_syms;
-		goto_programt::instructionst sliced_assign_insts;
-		get_all_sources(tgt, assign_insts, src_syms, sliced_assign_insts);
+		expr_sett src_syms;
+		goto_programt::instructionst clustered_asgn_insts;
+		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
 		cout << "target_syms : " << endl;
 		for (auto a : src_syms)
 			cout << from_expr(a) << ", ";
 		cout << "\n sliced_assign_insts : " << endl;
-		for (auto a : sliced_assign_insts)
+		for (auto a : clustered_asgn_insts)
 			cout << from_expr(a.code) << endl;
+		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+			non_recursive_tgts.insert(tgt);
+			continue;
+		}
+		else {
+
+		}
 
 	}
 }
