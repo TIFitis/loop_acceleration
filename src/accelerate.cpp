@@ -19,16 +19,15 @@ void acceleratort::get_loops() {
 	}
 }
 
-void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
+goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
-	goto_programt dup_body;
+	goto_programt &dup_body = *(new goto_programt());
 	dup_body.copy_from(functions);
 	Forall_goto_program_instructions(it, dup_body)
 	{
 		if (it->is_assert()) it->type = ASSUME;
 	}
-
 	goto_programt::targett sink = dup_body.add_instruction(ASSUME);
 	sink->guard = false_exprt();
 	goto_programt::targett end = dup_body.add_instruction(SKIP);
@@ -60,8 +59,84 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		}
 	}
 	remove_skip(dup_body);
+	return dup_body;
+}
+
+list<exprt> acceleratort::gather_syms(exprt expr) {
+	list<exprt> expr_syms;
+	if (expr.id() == ID_symbol)
+		expr_syms.push_back(expr);
+	else if (expr.id() == ID_index || expr.id() == ID_member
+			|| expr.id() == ID_dereference)
+		assert(false && "Not Handled type");
+	else {
+		forall_operands(it, expr) {
+			for (auto a : gather_syms(*it))
+				expr_syms.push_back(a);
+		}
+	}
+	return expr_syms;
+}
+
+void acceleratort::get_all_sources(exprt tgt,
+		goto_programt::instructionst &assign_insts,
+		list<exprt> &src_syms,
+		goto_programt::instructionst &sliced_assign_insts) {
+	src_syms = gather_syms(tgt);
+
+	for (goto_programt::instructionst::reverse_iterator r_it =
+			assign_insts.rbegin(); r_it != assign_insts.rend(); ++r_it) {
+		if (r_it->is_assign()) {
+			auto assignment = to_code_assign(r_it->code);
+			auto lhs_syms = gather_syms(assignment.lhs());
+
+			if (assignment.lhs().id() == ID_symbol) src_syms.push_back(tgt);
+
+			for (auto s_it : lhs_syms) {
+				if (find(src_syms.begin(), src_syms.end(), s_it)
+						!= src_syms.end()) {
+					sliced_assign_insts.push_front(*r_it);
+					src_syms.remove(assignment.lhs());
+					for (auto a : gather_syms(assignment.rhs()))
+						src_syms.push_back(a);
+					break;
+				}
+			}
+		}
+	}
+}
+
+void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
+		natural_loops_mutablet::natural_loopt &loop,
+		goto_programt &functions) {
+	auto &dup_body = create_dup_loop(loop_header, loop, functions);
+	auto dup_body_iter = dup_body.instructions.begin();
 //	cout << "After\n==============================\n";
 //	dup_body.output(cout);
+	goto_programt::instructionst assign_insts;
+	list<exprt> assign_tgts;
+	for (auto inst_it = dup_body.instructions.begin(), inst_end =
+			dup_body.instructions.end(); inst_it != inst_end;
+			inst_it++, dup_body_iter++) {
+		if (inst_it->is_assign()) {
+			assign_insts.push_back(*inst_it);
+			auto &x = to_code_assign(inst_it->code);
+			assign_tgts.push_back(x.lhs());
+		}
+	}
+	for (auto tgt : assign_tgts) {
+		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
+		list<exprt> src_syms;
+		goto_programt::instructionst sliced_assign_insts;
+		get_all_sources(tgt, assign_insts, src_syms, sliced_assign_insts);
+		cout << "target_syms : " << endl;
+		for (auto a : src_syms)
+			cout << from_expr(a) << ", ";
+		cout << "\n sliced_assign_insts : " << endl;
+		for (auto a : sliced_assign_insts)
+			cout << from_expr(a.code) << endl;
+
+	}
 }
 
 void acceleratort::accelerate_all_loops(goto_programt &goto_function) {

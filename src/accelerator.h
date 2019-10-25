@@ -18,6 +18,14 @@ class loop_acc::acceleratort {
 	void accelerate_loop(goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
 			goto_programt&);
+	goto_programt& create_dup_loop(goto_programt::targett&,
+			natural_loops_mutablet::natural_loopt&,
+			goto_programt&);
+	void get_all_sources(exprt,
+			goto_programt::instructionst&,
+			std::list<exprt>&,
+			goto_programt::instructionst&);
+	std::list<exprt> gather_syms(exprt);
 	void get_loops();
 
 public:
