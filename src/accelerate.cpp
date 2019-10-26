@@ -177,9 +177,18 @@ map<string, int> acceleratort::get_z3_model(string filename) {
 		val_ss >> x;
 		values[name] = x;
 	}
-//	for (auto a : values)
-//		cout << a.first << "::" << a.second << endl;
+	for (auto a : values)
+		cout << a.first << "::" << a.second << endl;
 	return values;
+}
+
+bool acceleratort::z3_fire(const string &z3_formula) {
+	FILE *fp = fopen("z3_input.smt", "w");
+	assert(fp != nullptr && "couldnt create input file for z3");
+	fputs(z3_formula.c_str(), fp);
+	string z3_command = "z3 -smt2 z3_input.smt >z3_results.dat";
+	system(z3_command.c_str());
+	return false;
 }
 
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
@@ -220,7 +229,17 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			continue;
 		}
 		else {
-//			create_z3_input();
+			//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
+			// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
+			// Todo: Also add each instruction constraint to the z3_parser!
+			std::set<exprt> inf;
+			for (auto a : src_syms)
+				inf.insert(a);
+			std::string s("i");
+			z3_parse parser { };
+			auto z3_formula = parser.buildFormula(inf, from_expr(tgt));
+			z3_fire(z3_formula);
 			auto z3_model = get_z3_model("z3_results.dat");
 		}
 

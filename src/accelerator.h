@@ -5,6 +5,7 @@
  *      Author: akash
  */
 #include "loop_acceleration.h"
+#include "z3_formula.h"
 
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
@@ -31,6 +32,7 @@ class loop_acc::acceleratort {
 	void get_loops();
 	symbolt create_symbol(std::string, const typet&);
 	std::map<std::string, int> get_z3_model(std::string);
+	bool z3_fire(const std::string&);
 
 public:
 	acceleratort(goto_modelt &goto_model) :
