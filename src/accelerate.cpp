@@ -369,7 +369,7 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			for(auto a: src_syms) inf.insert(a);
 			std::string s("i");
 			z3_parse parser{};
-			std::cout<<(parser.buildFormula(inf, s))<<std::endl;
+			std::cout<<(parser.buildFormula(inf, from_expr(tgt)))<<std::endl;
 		}
 
 	}
