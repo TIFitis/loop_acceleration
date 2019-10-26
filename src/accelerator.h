@@ -28,15 +28,9 @@ class loop_acc::acceleratort {
 			exprst&,
 			goto_programt::instructionst&);
 	exprst gather_syms(exprt);
-	void fit_polynomial_sliced(goto_programt::instructionst&, exprt&, exprst&);
 	void get_loops();
 	symbolt create_symbol(std::string, const typet&);
-	void assert_for_values(scratch_programt&,
-			std::map<exprt, int>&,
-			std::set<std::pair<std::list<exprt>, exprt> >&,
-			int,
-			goto_programt::instructionst&,
-			exprt&);
+	std::map<std::string, int> get_z3_model(std::string);
 
 public:
 	acceleratort(goto_modelt &goto_model) :

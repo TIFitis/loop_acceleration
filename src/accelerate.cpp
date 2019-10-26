@@ -153,177 +153,33 @@ typet join_types(const typet &t1, const typet &t2) {
 	assert(false && "Unhandled join types");
 }
 
-void acceleratort::assert_for_values(scratch_programt &program,
-		map<exprt, int> &values,
-		set<pair<list<exprt>, exprt> > &coefficients,
-		int num_unwindings,
-		goto_programt::instructionst &loop_body,
-		exprt &target) {
-	typet expr_type = nil_typet();
-	auto loop_counter = nil_exprt();
-
-	for (map<exprt, int>::iterator it = values.begin(); it != values.end();
-			++it) {
-		typet this_type = it->first.type();
-		if (this_type.id() == ID_pointer) {
-			this_type = size_type();
-		}
-
-		if (expr_type == nil_typet()) {
-			expr_type = this_type;
-		}
-		else {
-			expr_type = join_types(expr_type, this_type);
-		}
+map<string, int> acceleratort::get_z3_model(string filename) {
+	FILE *fp;
+	fp = fopen(filename.c_str(), "r");
+	assert(fp != nullptr && "Could not open z3_results.dat file");
+	char s[4096];
+	string raw_input = "";
+	while (fgets(s, 4096, fp))
+		raw_input += s;
+	map<string, int> values;
+	while (1) {
+		auto loc = raw_input.find("define-fun");
+		if (loc == raw_input.npos) break;
+		raw_input = raw_input.substr(loc + 11, raw_input.npos);
+		loc = raw_input.find(" ");
+		auto name = raw_input.substr(0, loc);
+		loc = raw_input.find("Int");
+		raw_input = raw_input.substr(loc + 8, raw_input.npos);
+		loc = raw_input.find(")");
+		auto val_s = raw_input.substr(0, loc);
+		stringstream val_ss(val_s);
+		int x = 0;
+		val_ss >> x;
+		values[name] = x;
 	}
-	assert(to_bitvector_type(expr_type).get_width() > 0);
-	for (map<exprt, int>::iterator it = values.begin(); it != values.end();
-			++it) {
-		program.assign(it->first, from_integer(it->second, expr_type));
-	}
-	for (int i = 0; i < num_unwindings; i++) {
-		program.append(loop_body);
-	}
-	exprt rhs = nil_exprt();
-
-	for (set<pair<list<exprt>, exprt> >::iterator it = coefficients.begin();
-			it != coefficients.end(); ++it) {
-		int concrete_value = 1;
-
-		for (list<exprt>::const_iterator e_it = it->first.begin();
-				e_it != it->first.end(); ++e_it) {
-			exprt e = *e_it;
-
-			if (e == loop_counter) {
-				concrete_value *= num_unwindings;
-			}
-			else {
-				map<exprt, int>::iterator v_it = values.find(e);
-
-				if (v_it != values.end()) {
-					concrete_value *= v_it->second;
-				}
-			}
-		}
-
-		typecast_exprt cast(it->second, expr_type);
-		const mult_exprt term(from_integer(concrete_value, expr_type), cast);
-
-		if (rhs.is_nil()) {
-			rhs = term;
-		}
-		else {
-			rhs = plus_exprt(rhs, term);
-		}
-	}
-
-//	exprt overflow_expr;
-//	overflow.overflow_expr(rhs, overflow_expr);
-
-//	program.add_instruction(ASSUME)->guard = not_exprt(overflow_expr);
-
-	rhs = typecast_exprt(rhs, target.type());
-
-	const equal_exprt polynomial_holds(target, rhs);
-
-	goto_programt::targett assumption = program.add_instruction(ASSUME);
-	assumption->guard = polynomial_holds;
-}
-
-void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
-		exprt &var,
-		exprst &influence) {
-	vector<list<exprt>> parameters;
-	set<pair<list<exprt>, exprt> > coefficients;
-	list<exprt> exprs;
-	string dummy = "";
-	cmdlinet c;
-	ui_message_handlert mh(c, dummy);
-	scratch_programt program(goto_model.symbol_table, mh);
-//	goto_programt program;
-//	exprt overflow_var = utils.fresh_symbol("polynomial::overflow",
-//			bool_typet()).symbol_expr();
-//	overflow_instrumentert overflow(program, overflow_var, symbol_table);
-	auto loop_counter = nil_exprt();
-	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-		if (it->id() == ID_index || it->id() == ID_dereference) {
-			return;
-		}
-
-		exprs.clear();
-
-		exprs.push_back(*it);
-		parameters.push_back(exprs);
-
-		exprs.push_back(loop_counter);
-		parameters.push_back(exprs);
-	}
-
-	// N
-	exprs.clear();
-	exprs.push_back(loop_counter);
-	parameters.push_back(exprs);
-
-	// N^2
-	exprs.push_back(loop_counter);
-	parameters.push_back(exprs);
-
-	// Constant
-	exprs.clear();
-	parameters.push_back(exprs);
-
-	if (!(var.type().id() == ID_signedbv || var.type().id() == ID_unsignedbv)) {
-		return;
-	}
-
-	size_t width = to_bitvector_type(var.type()).get_width();
-	assert(width > 0);
-
-	for (vector<list<exprt>>::iterator it = parameters.begin();
-			it != parameters.end(); ++it) {
-		auto coeff = create_symbol("polynomial::coeff", signedbv_typet(width));
-		coefficients.insert(make_pair(*it, coeff.symbol_expr()));
-	}
-	map<exprt, int> values;
-
-	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-		values[*it] = 0;
-	}
-
-	for (int n = 0; n <= 2; n++) {
-		for (exprst::iterator it = influence.begin(); it != influence.end();
-				++it) {
-			values[*it] = 1;
-			assert_for_values(program, values, coefficients, n, body, var);
-			values[*it] = 0;
-		}
-	}
-
-	assert_for_values(program, values, coefficients, 0, body, var);
-	assert_for_values(program, values, coefficients, 2, body, var);
-
-	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-		values[*it] = 2;
-	}
-
-	assert_for_values(program, values, coefficients, 2, body, var);
-
-	goto_programt::targett assertion = program.add_instruction(ASSERT);
-	assertion->guard = false_exprt();
-
-	try {
-		if (program.check_sat()) {
-			cout << "CHeck sat worked!!!";
-//			utils.extract_polynomial(program, coefficients, polynomial);
-			return;
-		}
-	} catch (const string &s) {
-		cout << "Error in fitting polynomial SAT check: " << s << '\n';
-	} catch (const char *s) {
-		cout << "Error in fitting polynomial SAT check: " << s << '\n';
-	}
-
-	return;
+//	for (auto a : values)
+//		cout << a.first << "::" << a.second << endl;
+	return values;
 }
 
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
@@ -346,6 +202,9 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	}
 	exprst non_recursive_tgts;
 	for (auto tgt : assign_tgts) {
+		symbol_exprt se = to_symbol_expr(tgt);
+		cout << se.get_identifier().c_str() << endl;
+
 		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
 		exprst src_syms;
 		goto_programt::instructionst clustered_asgn_insts;
@@ -361,7 +220,8 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			continue;
 		}
 		else {
-			fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+//			create_z3_input();
+			auto z3_model = get_z3_model("z3_results.dat");
 		}
 
 	}

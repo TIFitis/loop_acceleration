@@ -4,6 +4,7 @@
  *  Created on: 07-Oct-2019
  *      Author: Akash
  */
+#include <bits/stdc++.h>
 #include <string>
 #include <ostream>
 #include <iostream>
@@ -25,8 +26,6 @@
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/write_goto_binary.h>
-#include <solvers/sat/satcheck.h>
-#include <goto-instrument/accelerate/scratch_program.h>
 #include <langapi/language_util.h>
 #include <langapi/mode.h>
 #include <util/arith_tools.h>
