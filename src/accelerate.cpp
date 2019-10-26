@@ -186,7 +186,7 @@ bool acceleratort::z3_fire(const string &z3_formula) {
 	FILE *fp = fopen("z3_input.smt", "w");
 	assert(fp != nullptr && "couldnt create input file for z3");
 	fputs(z3_formula.c_str(), fp);
-	string z3_command = "z3 -smt2 z3_input.smt >z3_results.dat";
+	string z3_command = "z3 -smt2 z3_input.smt 2> z3_results.dat";
 	system(z3_command.c_str());
 	return false;
 }
