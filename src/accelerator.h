@@ -9,9 +9,29 @@
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
 
+typedef std::unordered_set<exprt, irep_hash> exprst;
+
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
-	std::vector<goto_programt::targett> get_loops();
+	std::map<goto_programt*, natural_loops_mutablet*> loops;
+
+	void accelerate_all_functions();
+	void accelerate_all_loops(goto_programt&);
+	void accelerate_loop(goto_programt::targett&,
+			natural_loops_mutablet::natural_loopt&,
+			goto_programt&);
+	goto_programt& create_dup_loop(goto_programt::targett&,
+			natural_loops_mutablet::natural_loopt&,
+			goto_programt&);
+	void get_all_sources(exprt,
+			goto_programt::instructionst&,
+			exprst&,
+			goto_programt::instructionst&);
+	exprst gather_syms(exprt);
+	void fit_polynomial_sliced(goto_programt::instructionst&, exprt&, exprst&);
+	void get_loops();
+	symbolt create_symbol(std::string, const typet&);
+
 public:
 	acceleratort(goto_modelt &goto_model) :
 			goto_model(goto_model) {
