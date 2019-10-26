@@ -5,6 +5,8 @@
 -include ../makefile.init
 
 RM := rm -rf
+CBMC_DIR :="../cbmc"
+CBMC_DBG :="-O0 -g -Wno-deprecated-declarations"
 
 # All of the sources participating in the build are defined here
 -include sources.mk
@@ -52,7 +54,13 @@ loop_acceleration: $(OBJS) $(USER_OBJS)
 clean:
 	-$(RM) $(CC_DEPS)$(C++_DEPS)$(EXECUTABLES)$(C_UPPER_DEPS)$(CXX_DEPS)$(OBJS)$(CPP_DEPS)$(C_DEPS) loop_acceleration
 	-@echo ' '
+	
+cbmc: 
+	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	minisat2-download
+	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j12
+	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-setup-submodules
+	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j12
 
-.PHONY: all clean dependents
+.PHONY: all clean dependents cbmc
 
 -include ../makefile.targets
