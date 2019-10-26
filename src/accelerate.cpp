@@ -361,7 +361,11 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			continue;
 		}
 		else {
-			fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			std::set<exprt> inf;
+			for(auto a: src_syms) inf.insert(a);
+			std::string s("i");
+			std::cout<<(z3_parse::buildFormula(inf, s))<<std::endl;
 		}
 
 	}

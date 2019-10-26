@@ -9,6 +9,9 @@
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
 
+#include <set>
+#include "z3_formula.h"
+
 typedef std::unordered_set<exprt, irep_hash> exprst;
 
 class loop_acc::acceleratort {
