@@ -121,6 +121,115 @@ symbolt acceleratort::create_symbol(string name, const typet &type) {
 	return symbol;
 }
 
+typet join_types(const typet &t1, const typet &t2) {
+	if (t1 == t2) {
+		return t1;
+	}
+	if ((t1.id() == ID_signedbv || t1.id() == ID_unsignedbv)
+			&& (t2.id() == ID_signedbv || t2.id() == ID_unsignedbv)) {
+
+		bitvector_typet b1 = to_bitvector_type(t1);
+		bitvector_typet b2 = to_bitvector_type(t2);
+
+		if (b1.id() == ID_unsignedbv && b2.id() == ID_unsignedbv) {
+			size_t width = max(b1.get_width(), b2.get_width());
+			return unsignedbv_typet(width);
+		}
+		else if (b1.id() == ID_signedbv && b2.id() == ID_signedbv) {
+			size_t width = max(b1.get_width(), b2.get_width());
+			return signedbv_typet(width);
+		}
+		else {
+			size_t signed_width =
+					t1.id() == ID_signedbv ? b1.get_width() : b2.get_width();
+			size_t unsigned_width =
+					t1.id() == ID_signedbv ? b2.get_width() : b1.get_width();
+
+			size_t width = max(signed_width, unsigned_width);
+
+			return signedbv_typet(width);
+		}
+	}
+	assert(false && "Unhandled join types");
+}
+
+void acceleratort::assert_for_values(scratch_programt &program,
+		map<exprt, int> &values,
+		set<pair<list<exprt>, exprt> > &coefficients,
+		int num_unwindings,
+		goto_programt::instructionst &loop_body,
+		exprt &target) {
+	typet expr_type = nil_typet();
+	auto loop_counter = nil_exprt();
+
+	for (map<exprt, int>::iterator it = values.begin(); it != values.end();
+			++it) {
+		typet this_type = it->first.type();
+		if (this_type.id() == ID_pointer) {
+			this_type = size_type();
+		}
+
+		if (expr_type == nil_typet()) {
+			expr_type = this_type;
+		}
+		else {
+			expr_type = join_types(expr_type, this_type);
+		}
+	}
+	assert(to_bitvector_type(expr_type).get_width() > 0);
+	for (map<exprt, int>::iterator it = values.begin(); it != values.end();
+			++it) {
+		program.assign(it->first, from_integer(it->second, expr_type));
+	}
+	for (int i = 0; i < num_unwindings; i++) {
+		program.append(loop_body);
+	}
+	exprt rhs = nil_exprt();
+
+	for (set<pair<list<exprt>, exprt> >::iterator it = coefficients.begin();
+			it != coefficients.end(); ++it) {
+		int concrete_value = 1;
+
+		for (list<exprt>::const_iterator e_it = it->first.begin();
+				e_it != it->first.end(); ++e_it) {
+			exprt e = *e_it;
+
+			if (e == loop_counter) {
+				concrete_value *= num_unwindings;
+			}
+			else {
+				map<exprt, int>::iterator v_it = values.find(e);
+
+				if (v_it != values.end()) {
+					concrete_value *= v_it->second;
+				}
+			}
+		}
+
+		typecast_exprt cast(it->second, expr_type);
+		const mult_exprt term(from_integer(concrete_value, expr_type), cast);
+
+		if (rhs.is_nil()) {
+			rhs = term;
+		}
+		else {
+			rhs = plus_exprt(rhs, term);
+		}
+	}
+
+//	exprt overflow_expr;
+//	overflow.overflow_expr(rhs, overflow_expr);
+
+//	program.add_instruction(ASSUME)->guard = not_exprt(overflow_expr);
+
+	rhs = typecast_exprt(rhs, target.type());
+
+	const equal_exprt polynomial_holds(target, rhs);
+
+	goto_programt::targett assumption = program.add_instruction(ASSUME);
+	assumption->guard = polynomial_holds;
+}
+
 void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
 		exprt &var,
 		exprst &influence) {
@@ -163,7 +272,7 @@ void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
 	exprs.clear();
 	parameters.push_back(exprs);
 
-	if (var.type().id() == ID_signedbv || var.type().id() == ID_unsignedbv) {
+	if (!(var.type().id() == ID_signedbv || var.type().id() == ID_unsignedbv)) {
 		return;
 	}
 
@@ -175,7 +284,6 @@ void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
 		auto coeff = create_symbol("polynomial::coeff", signedbv_typet(width));
 		coefficients.insert(make_pair(*it, coeff.symbol_expr()));
 	}
-	return;
 	map<exprt, int> values;
 
 	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
@@ -186,31 +294,26 @@ void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
 		for (exprst::iterator it = influence.begin(); it != influence.end();
 				++it) {
 			values[*it] = 1;
-//			assert_for_values(program,
-//					values,
-//					coefficients,
-//					n,
-//					body,
-//					var,
-//					overflow);
+			assert_for_values(program, values, coefficients, n, body, var);
 			values[*it] = 0;
 		}
 	}
 
-//	assert_for_values(program, values, coefficients, 0, body, var, overflow);
-//	assert_for_values(program, values, coefficients, 2, body, var, overflow);
+	assert_for_values(program, values, coefficients, 0, body, var);
+	assert_for_values(program, values, coefficients, 2, body, var);
 
 	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
 		values[*it] = 2;
 	}
 
-//	assert_for_values(program, values, coefficients, 2, body, var, overflow);
+	assert_for_values(program, values, coefficients, 2, body, var);
 
 	goto_programt::targett assertion = program.add_instruction(ASSERT);
 	assertion->guard = false_exprt();
 
 	try {
 		if (program.check_sat()) {
+			cout << "CHeck sat worked!!!";
 //			utils.extract_polynomial(program, coefficients, polynomial);
 			return;
 		}

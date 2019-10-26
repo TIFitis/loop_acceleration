@@ -29,7 +29,9 @@
 #include <goto-instrument/accelerate/scratch_program.h>
 #include <langapi/language_util.h>
 #include <langapi/mode.h>
+#include <util/arith_tools.h>
 #include <util/cmdline.h>
+#include <util/c_types.h>
 #include <util/expr.h>
 #include <util/message.h>
 #include <util/ui_message.h>

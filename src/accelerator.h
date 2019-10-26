@@ -31,6 +31,12 @@ class loop_acc::acceleratort {
 	void fit_polynomial_sliced(goto_programt::instructionst&, exprt&, exprst&);
 	void get_loops();
 	symbolt create_symbol(std::string, const typet&);
+	void assert_for_values(scratch_programt&,
+			std::map<exprt, int>&,
+			std::set<std::pair<std::list<exprt>, exprt> >&,
+			int,
+			goto_programt::instructionst&,
+			exprt&);
 
 public:
 	acceleratort(goto_modelt &goto_model) :
