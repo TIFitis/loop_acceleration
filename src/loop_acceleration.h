@@ -25,7 +25,8 @@
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/write_goto_binary.h>
-//#include <goto-instrument/accelerate/scratch_program.h>
+#include <solvers/sat/satcheck.h>
+#include <goto-instrument/accelerate/scratch_program.h>
 #include <langapi/language_util.h>
 #include <langapi/mode.h>
 #include <util/cmdline.h>
