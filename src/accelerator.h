@@ -9,7 +9,7 @@
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
 
-typedef std::unordered_set<exprt, irep_hash> expr_sett;
+typedef std::unordered_set<exprt, irep_hash> exprst;
 
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
@@ -25,10 +25,12 @@ class loop_acc::acceleratort {
 			goto_programt&);
 	void get_all_sources(exprt,
 			goto_programt::instructionst&,
-			expr_sett&,
+			exprst&,
 			goto_programt::instructionst&);
-	expr_sett gather_syms(exprt);
+	exprst gather_syms(exprt);
+	void fit_polynomial_sliced(goto_programt::instructionst&, exprt&, exprst&);
 	void get_loops();
+	symbolt create_symbol(std::string, const typet&);
 
 public:
 	acceleratort(goto_modelt &goto_model) :
