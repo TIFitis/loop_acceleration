@@ -161,6 +161,7 @@ map<string, int> acceleratort::get_z3_model(string filename) {
 	string raw_input = "";
 	while (fgets(s, 4096, fp))
 		raw_input += s;
+	fclose(fp);
 	map<string, int> values;
 	while (1) {
 		auto loc = raw_input.find("define-fun");
@@ -213,18 +214,18 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	exprst non_recursive_tgts;
 	for (auto tgt : assign_tgts) {
 		symbol_exprt se = to_symbol_expr(tgt);
-		cout << se.get_identifier().c_str() << endl;
+//		cout << se.get_identifier().c_str() << endl;
 
-		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
+//		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
 		exprst src_syms;
 		goto_programt::instructionst clustered_asgn_insts;
 		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
 		cout << "src_syms : " << endl;
-		for (auto a : src_syms)
-			cout << from_expr(a) << ", ";
-		cout << "\n clustered_asgn_insts : " << endl;
-		for (auto a : clustered_asgn_insts)
-			cout << from_expr(a.code) << endl;
+//		for (auto a : src_syms)
+//			cout << from_expr(a) << ", ";
+//		cout << "\n clustered_asgn_insts : " << endl;
+//		for (auto a : clustered_asgn_insts)
+//			cout << from_expr(a.code) << endl;
 		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
 			non_recursive_tgts.insert(tgt);
 			continue;
@@ -238,7 +239,15 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			for (auto a : src_syms)
 				inf.insert(a);
 			z3_parse parser { };
-			auto z3_formula = parser.buildFormula(inf, from_expr(tgt));
+			goto_programt::instructionst tgt_asgn_insts;
+			for (auto &inst : assign_insts) {
+				auto &inst_code = to_code_assign(inst.code);
+				if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
+			}
+			auto z3_formula = parser.buildFormula(inf,
+					from_expr(tgt),
+					tgt_asgn_insts);
+			cout << z3_formula << endl;
 			z3_fire(z3_formula);
 			auto z3_model = get_z3_model("z3_results.dat");
 		}

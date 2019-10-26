@@ -11,7 +11,6 @@ int main(){
     int buflen = 100;
     while(i != buflen){
         i++;
-	i+=buflen;
         assert(i <= buflen);
         i++;
     }
