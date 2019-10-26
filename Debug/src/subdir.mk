@@ -22,7 +22,7 @@ CPP_DEPS += \
 # Each subdirectory must supply rules for building sources it contributes
 src/%.o: ../src/%.cpp
 	@echo 'Building file: $<'
-	@g++ -I$(CBMC_DIR)"/src" -O0 -g3 -Wall -c -fmessage-length=0 -Wno-deprecated -Wno-deprecated-declarations -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	@g++ -I$(CBMC_DIR)"/src" -O0 -g3 -DSATCHECK_MINISAT2 -Wall -c -fmessage-length=0 -Wno-deprecated -Wno-deprecated-declarations -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
