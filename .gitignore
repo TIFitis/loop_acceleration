@@ -44,3 +44,5 @@ Debug/loop_acceleration
 *.out
 *.app
 /Debug/
+
+.idea/*
