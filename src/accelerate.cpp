@@ -362,10 +362,14 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		}
 		else {
 			//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
+			// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
+			// Todo: Also add each instruction constraint to the z3_parser!
 			std::set<exprt> inf;
 			for(auto a: src_syms) inf.insert(a);
 			std::string s("i");
-			std::cout<<(z3_parse::buildFormula(inf, s))<<std::endl;
+			z3_parse parser{};
+			std::cout<<(parser.buildFormula(inf, s))<<std::endl;
 		}
 
 	}
