@@ -45,8 +45,7 @@ all: loop_acceleration
 # Tool invocations
 loop_acceleration: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
-	@echo 'Invoking: GCC C++ Linker'
-	g++ -L$(CBMC_DIR)"/src" -o "loop_acceleration" $(OBJS) $(USER_OBJS) $(LIBS)
+	@g++ -L$(CBMC_DIR)"/src" -o "loop_acceleration" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -57,9 +56,9 @@ clean:
 	
 cbmc: 
 	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	minisat2-download
-	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j12
+	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
 	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	setup-submodules
-	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j12
+	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
 
 .PHONY: all clean dependents cbmc
 
