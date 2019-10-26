@@ -120,107 +120,108 @@ symbolt acceleratort::create_symbol(string name, const typet &type) {
 	symbol.mode = ID_C;
 	return symbol;
 }
-//void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
-//		exprt &var,
-//		exprst &influence) {
-//	vector<list<exprt>> parameters;
-//	set<pair<list<exprt>, exprt> > coefficients;
-//	list<exprt> exprs;
-//	string dummy = "";
-//	cmdlinet c;
-//	ui_message_handlert mh(c, dummy);
-//	scratch_programt program(goto_model.symbol_table, mh);
-////	goto_programt program;
-////	exprt overflow_var = utils.fresh_symbol("polynomial::overflow",
-////			bool_typet()).symbol_expr();
-////	overflow_instrumentert overflow(program, overflow_var, symbol_table);
-//	auto loop_counter = nil_exprt();
-//	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-//		if (it->id() == ID_index || it->id() == ID_dereference) {
-//			return;
-//		}
-//
-//		exprs.clear();
-//
-//		exprs.push_back(*it);
-//		parameters.push_back(exprs);
-//
-//		exprs.push_back(loop_counter);
-//		parameters.push_back(exprs);
-//	}
-//
-//	// N
-//	exprs.clear();
-//	exprs.push_back(loop_counter);
-//	parameters.push_back(exprs);
-//
-//	// N^2
-//	exprs.push_back(loop_counter);
-//	parameters.push_back(exprs);
-//
-//	// Constant
-//	exprs.clear();
-//	parameters.push_back(exprs);
-//
-//	if (var.type().id() == ID_signedbv || var.type().id() == ID_unsignedbv) {
-//		return;
-//	}
-//
-//	size_t width = to_bitvector_type(var.type()).get_width();
-//	assert(width > 0);
-//
-//	for (vector<list<exprt>>::iterator it = parameters.begin();
-//			it != parameters.end(); ++it) {
-//		auto coeff = create_symbol("polynomial::coeff", signedbv_typet(width));
-//		coefficients.insert(make_pair(*it, coeff.symbol_expr()));
-//	}
-//	return;
-//	map<exprt, int> values;
-//
-//	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-//		values[*it] = 0;
-//	}
-//
-//	for (int n = 0; n <= 2; n++) {
-//		for (exprst::iterator it = influence.begin(); it != influence.end();
-//				++it) {
-//			values[*it] = 1;
-////			assert_for_values(program,
-////					values,
-////					coefficients,
-////					n,
-////					body,
-////					var,
-////					overflow);
-//			values[*it] = 0;
-//		}
-//	}
-//
-////	assert_for_values(program, values, coefficients, 0, body, var, overflow);
-////	assert_for_values(program, values, coefficients, 2, body, var, overflow);
-//
-//	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-//		values[*it] = 2;
-//	}
-//
-////	assert_for_values(program, values, coefficients, 2, body, var, overflow);
-//
-//	goto_programt::targett assertion = program.add_instruction(ASSERT);
-//	assertion->guard = false_exprt();
-//
-//	try {
-//		if (program.check_sat()) {
-////			utils.extract_polynomial(program, coefficients, polynomial);
-//			return;
-//		}
-//	} catch (const string &s) {
-//		cout << "Error in fitting polynomial SAT check: " << s << '\n';
-//	} catch (const char *s) {
-//		cout << "Error in fitting polynomial SAT check: " << s << '\n';
-//	}
-//
-//	return;
-//}
+
+void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
+		exprt &var,
+		exprst &influence) {
+	vector<list<exprt>> parameters;
+	set<pair<list<exprt>, exprt> > coefficients;
+	list<exprt> exprs;
+	string dummy = "";
+	cmdlinet c;
+	ui_message_handlert mh(c, dummy);
+	scratch_programt program(goto_model.symbol_table, mh);
+//	goto_programt program;
+//	exprt overflow_var = utils.fresh_symbol("polynomial::overflow",
+//			bool_typet()).symbol_expr();
+//	overflow_instrumentert overflow(program, overflow_var, symbol_table);
+	auto loop_counter = nil_exprt();
+	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
+		if (it->id() == ID_index || it->id() == ID_dereference) {
+			return;
+		}
+
+		exprs.clear();
+
+		exprs.push_back(*it);
+		parameters.push_back(exprs);
+
+		exprs.push_back(loop_counter);
+		parameters.push_back(exprs);
+	}
+
+	// N
+	exprs.clear();
+	exprs.push_back(loop_counter);
+	parameters.push_back(exprs);
+
+	// N^2
+	exprs.push_back(loop_counter);
+	parameters.push_back(exprs);
+
+	// Constant
+	exprs.clear();
+	parameters.push_back(exprs);
+
+	if (var.type().id() == ID_signedbv || var.type().id() == ID_unsignedbv) {
+		return;
+	}
+
+	size_t width = to_bitvector_type(var.type()).get_width();
+	assert(width > 0);
+
+	for (vector<list<exprt>>::iterator it = parameters.begin();
+			it != parameters.end(); ++it) {
+		auto coeff = create_symbol("polynomial::coeff", signedbv_typet(width));
+		coefficients.insert(make_pair(*it, coeff.symbol_expr()));
+	}
+	return;
+	map<exprt, int> values;
+
+	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
+		values[*it] = 0;
+	}
+
+	for (int n = 0; n <= 2; n++) {
+		for (exprst::iterator it = influence.begin(); it != influence.end();
+				++it) {
+			values[*it] = 1;
+//			assert_for_values(program,
+//					values,
+//					coefficients,
+//					n,
+//					body,
+//					var,
+//					overflow);
+			values[*it] = 0;
+		}
+	}
+
+//	assert_for_values(program, values, coefficients, 0, body, var, overflow);
+//	assert_for_values(program, values, coefficients, 2, body, var, overflow);
+
+	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
+		values[*it] = 2;
+	}
+
+//	assert_for_values(program, values, coefficients, 2, body, var, overflow);
+
+	goto_programt::targett assertion = program.add_instruction(ASSERT);
+	assertion->guard = false_exprt();
+
+	try {
+		if (program.check_sat()) {
+//			utils.extract_polynomial(program, coefficients, polynomial);
+			return;
+		}
+	} catch (const string &s) {
+		cout << "Error in fitting polynomial SAT check: " << s << '\n';
+	} catch (const char *s) {
+		cout << "Error in fitting polynomial SAT check: " << s << '\n';
+	}
+
+	return;
+}
 
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
@@ -257,7 +258,7 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			continue;
 		}
 		else {
-//			fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
 		}
 
 	}
