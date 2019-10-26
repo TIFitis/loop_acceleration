@@ -57,8 +57,8 @@ clean:
 cbmc: 
 	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	minisat2-download
 	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
-	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	setup-submodules
-	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
+#	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	setup-submodules
+#	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
 
 .PHONY: all clean dependents cbmc
 
