@@ -34,6 +34,8 @@
 #include <util/expr.h>
 #include <util/message.h>
 #include <util/ui_message.h>
+#include <util/replace_expr.h>
+#include <util/simplify_expr.h>
 
 #ifndef LOOP_ACCELERATION_H_
 #define LOOP_ACCELERATION_H_

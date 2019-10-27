@@ -9,10 +9,9 @@ int main(){
     
     int i = 0;
     int buflen = 100;
-    while(i != buflen){
-        i++;
+    while(1){
+        i+=2;
         assert(i <= buflen);
-        i++;
     }
     return 0;
 }

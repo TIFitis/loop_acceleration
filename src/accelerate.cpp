@@ -193,6 +193,43 @@ bool acceleratort::z3_fire(const string &z3_formula) {
 	return false;
 }
 
+exprt acceleratort::precondition(goto_programt &goto_prog) {
+	exprt ret = false_exprt();
+
+	for (auto r_it = goto_prog.instructions.rbegin();
+			r_it != goto_prog.instructions.rend(); ++r_it) {
+
+		if (r_it->is_assign()) {
+			const code_assignt &assignment = to_code_assign(r_it->code);
+			const exprt &lhs = assignment.lhs();
+			const exprt &rhs = assignment.rhs();
+
+			if (lhs.id() == ID_symbol) {
+				replace_expr(lhs, rhs, ret);
+			}
+			else if (lhs.id() == ID_index || lhs.id() == ID_dereference) {
+				continue;
+			}
+			else {
+				assert(false && "couldnt find precondition");
+			}
+		}
+		else if (r_it->is_assume() || r_it->is_assert()) {
+			ret = implies_exprt(r_it->guard, ret);
+		}
+		else {
+		}
+
+		if (!r_it->guard.is_true() && !r_it->guard.is_nil()) {
+			ret = implies_exprt(r_it->guard, ret);
+		}
+	}
+
+	simplify(ret, namespacet(goto_model.symbol_table));
+
+	return ret;
+}
+
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
@@ -250,6 +287,10 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			cout << z3_formula << endl;
 			z3_fire(z3_formula);
 			auto z3_model = get_z3_model("z3_results.dat");
+
+			cout << "Precondition : "
+					<< from_expr(precondition(dup_body))
+					<< endl;
 		}
 
 	}
