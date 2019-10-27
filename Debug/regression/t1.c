@@ -9,17 +9,9 @@ int main(){
     
     int i = 0;
     int buflen = 100;
-    char ch;
-    while(i != buflen){
-        char c;
-        ch = c;
-        if(ch == '\0'){
-            i++;
-            char c2;
-            ch = c2;
-        }
+    while(1){
+        i+=2;
         assert(i <= buflen);
-        i++;
     }
     return 0;
 }

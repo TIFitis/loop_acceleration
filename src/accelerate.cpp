@@ -120,106 +120,114 @@ symbolt acceleratort::create_symbol(string name, const typet &type) {
 	symbol.mode = ID_C;
 	return symbol;
 }
-void acceleratort::fit_polynomial_sliced(goto_programt::instructionst &body,
-		exprt &var,
-		exprst &influence) {
-	vector<list<exprt>> parameters;
-	set<pair<list<exprt>, exprt> > coefficients;
-	list<exprt> exprs;
-	string dummy = "";
-	cmdlinet c;
-	ui_message_handlert mh(c, dummy);
-	scratch_programt program(goto_model.symbol_table, mh);
-//	goto_programt program;
-//	exprt overflow_var = utils.fresh_symbol("polynomial::overflow",
-//			bool_typet()).symbol_expr();
-//	overflow_instrumentert overflow(program, overflow_var, symbol_table);
-	auto loop_counter = nil_exprt();
-	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-		if (it->id() == ID_index || it->id() == ID_dereference) {
-			return;
+
+typet join_types(const typet &t1, const typet &t2) {
+	if (t1 == t2) {
+		return t1;
+	}
+	if ((t1.id() == ID_signedbv || t1.id() == ID_unsignedbv)
+			&& (t2.id() == ID_signedbv || t2.id() == ID_unsignedbv)) {
+
+		bitvector_typet b1 = to_bitvector_type(t1);
+		bitvector_typet b2 = to_bitvector_type(t2);
+
+		if (b1.id() == ID_unsignedbv && b2.id() == ID_unsignedbv) {
+			size_t width = max(b1.get_width(), b2.get_width());
+			return unsignedbv_typet(width);
 		}
+		else if (b1.id() == ID_signedbv && b2.id() == ID_signedbv) {
+			size_t width = max(b1.get_width(), b2.get_width());
+			return signedbv_typet(width);
+		}
+		else {
+			size_t signed_width =
+					t1.id() == ID_signedbv ? b1.get_width() : b2.get_width();
+			size_t unsigned_width =
+					t1.id() == ID_signedbv ? b2.get_width() : b1.get_width();
 
-		exprs.clear();
+			size_t width = max(signed_width, unsigned_width);
 
-		exprs.push_back(*it);
-		parameters.push_back(exprs);
-
-		exprs.push_back(loop_counter);
-		parameters.push_back(exprs);
-	}
-
-	// N
-	exprs.clear();
-	exprs.push_back(loop_counter);
-	parameters.push_back(exprs);
-
-	// N^2
-	exprs.push_back(loop_counter);
-	parameters.push_back(exprs);
-
-	// Constant
-	exprs.clear();
-	parameters.push_back(exprs);
-
-	if (var.type().id() == ID_signedbv || var.type().id() == ID_unsignedbv) {
-		return;
-	}
-
-	size_t width = to_bitvector_type(var.type()).get_width();
-	assert(width > 0);
-
-	for (vector<list<exprt>>::iterator it = parameters.begin();
-			it != parameters.end(); ++it) {
-		auto coeff = create_symbol("polynomial::coeff", signedbv_typet(width));
-		coefficients.insert(make_pair(*it, coeff.symbol_expr()));
-	}
-	return;
-	map<exprt, int> values;
-
-	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-		values[*it] = 0;
-	}
-
-	for (int n = 0; n <= 2; n++) {
-		for (exprst::iterator it = influence.begin(); it != influence.end();
-				++it) {
-			values[*it] = 1;
-//			assert_for_values(program,
-//					values,
-//					coefficients,
-//					n,
-//					body,
-//					var,
-//					overflow);
-			values[*it] = 0;
+			return signedbv_typet(width);
 		}
 	}
+	assert(false && "Unhandled join types");
+}
 
-//	assert_for_values(program, values, coefficients, 0, body, var, overflow);
-//	assert_for_values(program, values, coefficients, 2, body, var, overflow);
-
-	for (exprst::iterator it = influence.begin(); it != influence.end(); ++it) {
-		values[*it] = 2;
+map<string, int> acceleratort::get_z3_model(string filename) {
+	FILE *fp;
+	fp = fopen(filename.c_str(), "r");
+	assert(fp != nullptr && "Could not open z3_results.dat file");
+	char s[4096];
+	string raw_input = "";
+	while (fgets(s, 4096, fp))
+		raw_input += s;
+	fclose(fp);
+	map<string, int> values;
+	while (1) {
+		auto loc = raw_input.find("define-fun");
+		if (loc == raw_input.npos) break;
+		raw_input = raw_input.substr(loc + 11, raw_input.npos);
+		loc = raw_input.find(" ");
+		auto name = raw_input.substr(0, loc);
+		loc = raw_input.find("Int");
+		raw_input = raw_input.substr(loc + 8, raw_input.npos);
+		loc = raw_input.find(")");
+		auto val_s = raw_input.substr(0, loc);
+		stringstream val_ss(val_s);
+		int x = 0;
+		val_ss >> x;
+		values[name] = x;
 	}
+	for (auto a : values)
+		cout << a.first << "::" << a.second << endl;
+	return values;
+}
 
-//	assert_for_values(program, values, coefficients, 2, body, var, overflow);
+bool acceleratort::z3_fire(const string &z3_formula) {
+	FILE *fp = fopen("z3_input.smt", "w");
+	assert(fp != nullptr && "couldnt create input file for z3");
+	fputs(z3_formula.c_str(), fp);
+	fclose(fp);
+	string z3_command = "z3 -smt2 z3_input.smt > z3_results.dat";
+	system(z3_command.c_str());
+	return false;
+}
 
-	goto_programt::targett assertion = program.add_instruction(ASSERT);
-	assertion->guard = false_exprt();
+exprt acceleratort::precondition(goto_programt &goto_prog) {
+	exprt ret = false_exprt();
 
-	try {
-		if (program.check_sat()) {
-//			utils.extract_polynomial(program, coefficients, polynomial);
-			return;
+	for (auto r_it = goto_prog.instructions.rbegin();
+			r_it != goto_prog.instructions.rend(); ++r_it) {
+
+		if (r_it->is_assign()) {
+			const code_assignt &assignment = to_code_assign(r_it->code);
+			const exprt &lhs = assignment.lhs();
+			const exprt &rhs = assignment.rhs();
+
+			if (lhs.id() == ID_symbol) {
+				replace_expr(lhs, rhs, ret);
+			}
+			else if (lhs.id() == ID_index || lhs.id() == ID_dereference) {
+				continue;
+			}
+			else {
+				assert(false && "couldnt find precondition");
+			}
 		}
-	} catch (const string &s) {
-		cout << "Error in fitting polynomial SAT check: " << s << '\n';
-	} catch (const char *s) {
-		cout << "Error in fitting polynomial SAT check: " << s << '\n';
+		else if (r_it->is_assume() || r_it->is_assert()) {
+			ret = implies_exprt(r_it->guard, ret);
+		}
+		else {
+		}
+
+		if (!r_it->guard.is_true() && !r_it->guard.is_nil()) {
+			ret = implies_exprt(r_it->guard, ret);
+		}
 	}
 
-	return;
+	simplify(ret, namespacet(goto_model.symbol_table));
+
+	return ret;
 }
 
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
@@ -242,22 +250,47 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	}
 	exprst non_recursive_tgts;
 	for (auto tgt : assign_tgts) {
-		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
+		symbol_exprt se = to_symbol_expr(tgt);
+//		cout << se.get_identifier().c_str() << endl;
+
+//		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
 		exprst src_syms;
 		goto_programt::instructionst clustered_asgn_insts;
 		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
 		cout << "src_syms : " << endl;
-		for (auto a : src_syms)
-			cout << from_expr(a) << ", ";
-		cout << "\n clustered_asgn_insts : " << endl;
-		for (auto a : clustered_asgn_insts)
-			cout << from_expr(a.code) << endl;
+//		for (auto a : src_syms)
+//			cout << from_expr(a) << ", ";
+//		cout << "\n clustered_asgn_insts : " << endl;
+//		for (auto a : clustered_asgn_insts)
+//			cout << from_expr(a.code) << endl;
 		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
 			non_recursive_tgts.insert(tgt);
 			continue;
 		}
 		else {
-			fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+			// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
+			// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
+			// Todo: Also add each instruction constraint to the z3_parser!
+			std::set<exprt> inf;
+			for (auto a : src_syms)
+				inf.insert(a);
+			z3_parse parser { };
+			goto_programt::instructionst tgt_asgn_insts;
+			for (auto &inst : assign_insts) {
+				auto &inst_code = to_code_assign(inst.code);
+				if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
+			}
+			auto z3_formula = parser.buildFormula(inf,
+					from_expr(tgt),
+					tgt_asgn_insts);
+			cout << z3_formula << endl;
+			z3_fire(z3_formula);
+			auto z3_model = get_z3_model("z3_results.dat");
+
+			cout << "Precondition : "
+					<< from_expr(precondition(dup_body))
+					<< endl;
 		}
 
 	}
