@@ -3,10 +3,9 @@
 ################################################################################
 
 -include ../makefile.init
+-include config.inc
 
 RM := rm -rf
-CBMC_DIR :="../cbmc"
-CBMC_DBG :="-O0 -g -Wno-deprecated-declarations"
 
 # All of the sources participating in the build are defined here
 -include sources.mk
@@ -55,10 +54,10 @@ clean:
 	-@echo ' '
 	
 cbmc: 
-	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	minisat2-download
-	$(MAKE)	-C	../cbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
-#	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	setup-submodules
-#	$(MAKE)	-C	../cbmc/jbmc/src	CXXFLAGS+=$(CBMC_DBG)	-j
+	$(MAKE)	-C	$(CBMC_DIR)"/src"	CXXFLAGS+=$(CBMC_DBG)	minisat2-download
+	$(MAKE)	-C	$(CBMC_DIR)"/src"	CXXFLAGS+=$(CBMC_DBG)	-j
+	$(MAKE)	-C	$(CBMC_DIR)"/jbmc/src"	CXXFLAGS+=$(CBMC_DBG)	setup-submodules
+	$(MAKE)	-C	$(CBMC_DIR)"/jbmc/src"	CXXFLAGS+=$(CBMC_DBG)	-j
 
 .PHONY: all clean dependents cbmc
 
