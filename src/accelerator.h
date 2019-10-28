@@ -33,7 +33,7 @@ class loop_acc::acceleratort {
 	symbolt create_symbol(std::string, const typet&);
 	std::map<std::string, int> get_z3_model(std::string);
 	bool z3_fire(const std::string&);
-	exprt precondition(goto_programt &);
+//	exprt precondition(goto_programt &);
 	bool check_pattern(code_assignt &, exprt);
 	bool augment_path(goto_programt::targett &loop_header,
 			goto_programt &functions,

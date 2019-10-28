@@ -195,42 +195,42 @@ bool acceleratort::z3_fire(const string &z3_formula) {
 	return false;
 }
 
-exprt acceleratort::precondition(goto_programt &goto_prog) {
-	exprt ret = false_exprt();
-
-	for (auto r_it = goto_prog.instructions.rbegin();
-			r_it != goto_prog.instructions.rend(); ++r_it) {
-
-		if (r_it->is_assign()) {
-			const code_assignt &assignment = to_code_assign(r_it->code);
-			const exprt &lhs = assignment.lhs();
-			const exprt &rhs = assignment.rhs();
-
-			if (lhs.id() == ID_symbol) {
-				replace_expr(lhs, rhs, ret);
-			}
-			else if (lhs.id() == ID_index || lhs.id() == ID_dereference) {
-				continue;
-			}
-			else {
-				assert(false && "couldnt find precondition");
-			}
-		}
-		else if (r_it->is_assume() || r_it->is_assert()) {
-			ret = implies_exprt(r_it->guard, ret);
-		}
-		else {
-		}
-
-		if (!r_it->guard.is_true() && !r_it->guard.is_nil()) {
-			ret = implies_exprt(r_it->guard, ret);
-		}
-	}
-
-	simplify(ret, namespacet(goto_model.symbol_table));
-
-	return ret;
-}
+//exprt acceleratort::precondition(goto_programt &goto_prog) {
+//	exprt ret = false_exprt();
+//
+//	for (auto r_it = goto_prog.instructions.rbegin();
+//			r_it != goto_prog.instructions.rend(); ++r_it) {
+//
+//		if (r_it->is_assign()) {
+//			const code_assignt &assignment = to_code_assign(r_it->code);
+//			const exprt &lhs = assignment.lhs();
+//			const exprt &rhs = assignment.rhs();
+//
+//			if (lhs.id() == ID_symbol) {
+//				replace_expr(lhs, rhs, ret);
+//			}
+//			else if (lhs.id() == ID_index || lhs.id() == ID_dereference) {
+//				continue;
+//			}
+//			else {
+//				assert(false && "couldnt find precondition");
+//			}
+//		}
+//		else if (r_it->is_assume() || r_it->is_assert()) {
+//			ret = implies_exprt(r_it->guard, ret);
+//		}
+//		else {
+//		}
+//
+//		if (!r_it->guard.is_true() && !r_it->guard.is_nil()) {
+//			ret = implies_exprt(r_it->guard, ret);
+//		}
+//	}
+//
+//	simplify(ret, namespacet(goto_model.symbol_table));
+//
+//	return ret;
+//}
 
 bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	auto l_e = to_symbol_expr(inst_c.lhs());
@@ -296,6 +296,13 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		goto_programt &functions) {
 	auto &dup_body = create_dup_loop(loop_header, loop, functions);
 	auto dup_body_iter = dup_body.instructions.begin();
+	exprt loop_cond;
+	if (loop_header->is_goto()) {
+		cout << "Cond :: "
+				<< from_expr(to_not_expr(loop_header->guard).op0())
+				<< endl;
+		loop_cond = to_not_expr(loop_header->guard).op0();
+	}
 //	cout << "After\n==============================\n";
 //	dup_body.output(cout);
 	goto_programt::instructionst assign_insts;
@@ -312,10 +319,10 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	exprst non_recursive_tgts;
 	auto n_sym = create_symbol("loop_counter", signedbv_typet(32));
 	goto_model.symbol_table.insert(n_sym);
-	auto ins = dup_body.insert_before(dup_body.instructions.begin());
-	ins->make_assignment();
-	ins->code = code_assignt(n_sym.symbol_expr(),
-			side_effect_expr_nondett(n_sym.type, ins->source_location));
+	auto lc_ins = dup_body.insert_before(dup_body.instructions.begin());
+	lc_ins->make_assignment();
+	lc_ins->code = code_assignt(n_sym.symbol_expr(),
+			side_effect_expr_nondett(n_sym.type, lc_ins->source_location));
 	for (auto &inst : assign_insts) {
 		dup_body.update();
 		auto &inst_code = to_code_assign(inst.code);
@@ -330,11 +337,20 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		if (!check_pattern(inst_code, n_sym.symbol_expr())) {
 			assert(false && "out of pattern!");
 		}
+		for (auto &op : loop_cond.operands()) {
+			if (op == tgt) {
+				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
+				op = inst_code.rhs();
+				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
+			}
+		}
 		auto x = dup_body.instructions.begin();
 		advance(x, inst.location_number + 1);
 		x->code.swap(inst_code);
 		dup_body.update();
 	}
+	auto pre_cond_assume = dup_body.insert_after(lc_ins);
+	pre_cond_assume->make_assumption(loop_cond);
 //	dup_body.output(cout);
 //	functions.output(cout);
 	augment_path(loop_header, functions, dup_body);
@@ -379,9 +395,9 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			z3_fire(z3_formula);
 			auto z3_model = get_z3_model("z3_results.dat");
 
-			cout << "Precondition : "
-					<< from_expr(precondition(dup_body))
-					<< endl;
+//			cout << "Precondition : "
+//					<< from_expr(precondition(dup_body))
+//					<< endl;
 		}
 
 	}
