@@ -86,6 +86,8 @@ std::string z3_parse::buildAssert(std::set<exprt> &influence,
 	std::string x("(declare-const " + my_name + "_new Int )\n");
 
 	x.append("(assert (= N 1))\n");
+//	x.append("(assert (>= N 0))\n");
+//	x.append("(assert (<= N 2))\n");
 
 	// Should change the values here using some path exec >..<
 	for (auto a : influence) {
