@@ -21,7 +21,8 @@ void acceleratort::get_loops() {
 
 goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
-		goto_programt &functions) {
+		goto_programt &functions,
+		goto_programt::targett &loop_sink) {
 	goto_programt &dup_body = *(new goto_programt());
 	dup_body.copy_from(functions);
 //	Forall_goto_program_instructions(it, dup_body)
@@ -31,7 +32,8 @@ goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header
 
 	goto_programt::targett sink = dup_body.add_instruction(ASSUME);
 	sink->guard = false_exprt();
-	goto_programt::targett end = dup_body.add_instruction(SKIP);
+	loop_sink = sink;
+//	goto_programt::targett end = dup_body.add_instruction(SKIP);
 //	auto end = (*loop.rbegin())->get_target();
 	goto_programt::targett start = dup_body.instructions.begin();
 	for (auto tgt_it = functions.instructions.begin(), tgt_end =
@@ -262,7 +264,7 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 //							<< "\nrhs : "
 //							<< inst_c.rhs().type().id().c_str()
 //							<< endl;
-//					inst_c = code_assignt(inst_c.lhs(), mod_expr);
+					inst_c = code_assignt(inst_c.lhs(), mod_expr);
 					return true;
 				}
 			}
@@ -291,10 +293,21 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 	return true;
 }
 
+void fix_loop_cond(exprt &l_c, exprt &n_e, exprt &j_e) {
+	for (auto &op : l_c.operands()) {
+		cout << "here1 :: " << from_expr(op) << endl;
+		if (op == n_e) {
+			op = j_e;
+		}
+		fix_loop_cond(op, n_e, j_e);
+	}
+}
+
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
-	auto &dup_body = create_dup_loop(loop_header, loop, functions);
+	goto_programt::targett loop_sink;
+	auto &dup_body = create_dup_loop(loop_header, loop, functions, loop_sink);
 	auto dup_body_iter = dup_body.instructions.begin();
 	exprt loop_cond;
 	if (loop_header->is_goto()) {
@@ -319,10 +332,30 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	exprst non_recursive_tgts;
 	auto n_sym = create_symbol("loop_counter", signedbv_typet(32));
 	goto_model.symbol_table.insert(n_sym);
+	auto n_exp = n_sym.symbol_expr();
 	auto lc_ins = dup_body.insert_before(dup_body.instructions.begin());
 	lc_ins->make_assignment();
 	lc_ins->code = code_assignt(n_sym.symbol_expr(),
 			side_effect_expr_nondett(n_sym.type, lc_ins->source_location));
+	auto lc_asump = dup_body.insert_after(lc_ins);
+	lc_asump->make_assumption(binary_relation_exprt(n_exp,
+			ID_ge,
+			from_integer(0, n_exp.type())));
+	auto j_sym = create_symbol("pre_cond_j", signedbv_typet(32));
+	goto_model.symbol_table.insert(j_sym);
+	auto j_exp = j_sym.symbol_expr();
+	auto j_ins = dup_body.insert_after(lc_asump);
+	j_ins->make_assignment();
+	j_ins->code = code_assignt(j_exp,
+			side_effect_expr_nondett(j_sym.type, j_ins->source_location));
+	auto pre_cond_assume2 = dup_body.insert_after(j_ins);
+	pre_cond_assume2->make_assumption(binary_relation_exprt(j_exp,
+			ID_ge,
+			from_integer(0, j_exp.type())));
+	auto pre_cond_assume1 = dup_body.insert_after(pre_cond_assume2);
+	pre_cond_assume1->make_assumption(binary_relation_exprt(j_exp,
+			ID_le,
+			n_exp));
 	for (auto &inst : assign_insts) {
 		dup_body.update();
 		auto &inst_code = to_code_assign(inst.code);
@@ -334,23 +367,59 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			non_recursive_tgts.insert(tgt);
 			continue;
 		}
-		if (!check_pattern(inst_code, n_sym.symbol_expr())) {
+		if (!check_pattern(inst_code, n_exp)) {
 			assert(false && "out of pattern!");
 		}
 		for (auto &op : loop_cond.operands()) {
 			if (op == tgt) {
 				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
 				op = inst_code.rhs();
-				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
+				cout << "cond befoer2 :: " << from_expr(loop_cond) << endl;
 			}
 		}
 		auto x = dup_body.instructions.begin();
-		advance(x, inst.location_number + 1);
-		x->code.swap(inst_code);
+		advance(x, inst.location_number + 5);
+//		cout << " inst_code : " << from_expr(inst_code) << endl;
+//		cout << " x_code : " << from_expr(x->code) << endl;
+		x->code = inst_code;
 		dup_body.update();
 	}
-	auto pre_cond_assume = dup_body.insert_after(lc_ins);
-	pre_cond_assume->make_assumption(loop_cond);
+	fix_loop_cond(loop_cond, n_exp, j_exp);
+	cout << "final cond befoer2 :: " << from_expr(loop_cond) << endl;
+
+	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
+	pre_cond_assume->make_goto(loop_sink,
+			not_exprt(exists_exprt(j_exp,
+					not_exprt(implies_exprt(and_exprt(binary_relation_exprt(j_exp,
+							ID_ge,
+							from_integer(0, j_exp.type())),
+							binary_relation_exprt(j_exp, ID_le, n_exp)),
+							loop_cond)))));
+
+//	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
+//	pre_cond_assume->make_goto(loop_sink,
+//			not_exprt(forall_exprt(j_exp,
+//					implies_exprt(and_exprt(binary_relation_exprt(j_exp,
+//							ID_ge,
+//							from_integer(0, j_exp.type())),
+//							binary_relation_exprt(j_exp, ID_le, n_exp)),
+//							loop_cond))));
+
+//	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
+//	pre_cond_assume->make_assumption(forall_exprt(j_exp,
+//			implies_exprt(and_exprt(binary_relation_exprt(j_exp,
+//					ID_ge,
+//					from_integer(0, j_exp.type())),
+//					binary_relation_exprt(j_exp, ID_le, n_exp)),
+//					loop_cond)));
+
+//	pre_cond_assume->make_assumption(forall_exprt(j_exp,
+//			and_exprt(binary_relation_exprt(j_exp,
+//					ID_ge,
+//					from_integer(0, j_exp.type())),
+//					and_exprt(binary_relation_exprt(j_exp, ID_le, n_exp),
+//							loop_cond))));
+
 //	dup_body.output(cout);
 //	functions.output(cout);
 	augment_path(loop_header, functions, dup_body);

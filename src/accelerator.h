@@ -23,7 +23,7 @@ class loop_acc::acceleratort {
 			goto_programt&);
 	goto_programt& create_dup_loop(goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
-			goto_programt&);
+			goto_programt&, goto_programt::targett &);
 	void get_all_sources(exprt,
 			goto_programt::instructionst&,
 			exprst&,
