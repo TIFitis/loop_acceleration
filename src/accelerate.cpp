@@ -21,7 +21,8 @@ void acceleratort::get_loops() {
 
 goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
-		goto_programt &functions) {
+		goto_programt &functions,
+		goto_programt::targett &loop_sink) {
 	goto_programt &dup_body = *(new goto_programt());
 	dup_body.copy_from(functions);
 //	Forall_goto_program_instructions(it, dup_body)
@@ -31,7 +32,8 @@ goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header
 
 	goto_programt::targett sink = dup_body.add_instruction(ASSUME);
 	sink->guard = false_exprt();
-	goto_programt::targett end = dup_body.add_instruction(SKIP);
+	loop_sink = sink;
+//	goto_programt::targett end = dup_body.add_instruction(SKIP);
 //	auto end = (*loop.rbegin())->get_target();
 	goto_programt::targett start = dup_body.instructions.begin();
 	for (auto tgt_it = functions.instructions.begin(), tgt_end =
@@ -195,42 +197,7 @@ bool acceleratort::z3_fire(const string &z3_formula) {
 	return false;
 }
 
-exprt acceleratort::precondition(goto_programt &goto_prog) {
-	exprt ret = false_exprt();
 
-	for (auto r_it = goto_prog.instructions.rbegin();
-			r_it != goto_prog.instructions.rend(); ++r_it) {
-
-		if (r_it->is_assign()) {
-			const code_assignt &assignment = to_code_assign(r_it->code);
-			const exprt &lhs = assignment.lhs();
-			const exprt &rhs = assignment.rhs();
-
-			if (lhs.id() == ID_symbol) {
-				replace_expr(lhs, rhs, ret);
-			}
-			else if (lhs.id() == ID_index || lhs.id() == ID_dereference) {
-				continue;
-			}
-			else {
-				assert(false && "couldnt find precondition");
-			}
-		}
-		else if (r_it->is_assume() || r_it->is_assert()) {
-			ret = implies_exprt(r_it->guard, ret);
-		}
-		else {
-		}
-
-		if (!r_it->guard.is_true() && !r_it->guard.is_nil()) {
-			ret = implies_exprt(r_it->guard, ret);
-		}
-	}
-
-	simplify(ret, namespacet(goto_model.symbol_table));
-
-	return ret;
-}
 
 bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	auto l_e = to_symbol_expr(inst_c.lhs());
@@ -262,7 +229,7 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 //							<< "\nrhs : "
 //							<< inst_c.rhs().type().id().c_str()
 //							<< endl;
-//					inst_c = code_assignt(inst_c.lhs(), mod_expr);
+					inst_c = code_assignt(inst_c.lhs(), mod_expr);
 					return true;
 				}
 			}
@@ -291,11 +258,29 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 	return true;
 }
 
+void fix_loop_cond(exprt &l_c, exprt &n_e, exprt &j_e) {
+	for (auto &op : l_c.operands()) {
+		cout << "here1 :: " << from_expr(op) << endl;
+		if (op == n_e) {
+			op = j_e;
+		}
+		fix_loop_cond(op, n_e, j_e);
+	}
+}
+
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
-	auto &dup_body = create_dup_loop(loop_header, loop, functions);
+	goto_programt::targett loop_sink;
+	auto &dup_body = create_dup_loop(loop_header, loop, functions, loop_sink);
 	auto dup_body_iter = dup_body.instructions.begin();
+	exprt loop_cond;
+	if (loop_header->is_goto()) {
+		cout << "Cond :: "
+				<< from_expr(to_not_expr(loop_header->guard).op0())
+				<< endl;
+		loop_cond = to_not_expr(loop_header->guard).op0();
+	}
 //	cout << "After\n==============================\n";
 //	dup_body.output(cout);
 	goto_programt::instructionst assign_insts;
@@ -312,34 +297,75 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	exprst non_recursive_tgts;
 	auto n_sym = create_symbol("loop_counter", signedbv_typet(32));
 	goto_model.symbol_table.insert(n_sym);
-	auto ins = dup_body.insert_before(dup_body.instructions.begin());
-	ins->make_assignment();
-	ins->code = code_assignt(n_sym.symbol_expr(),
-			side_effect_expr_nondett(n_sym.type, ins->source_location));
-	for (auto &inst : assign_insts) {
-		dup_body.update();
-		auto &inst_code = to_code_assign(inst.code);
-		auto tgt = inst_code.lhs();
-		exprst src_syms;
-		goto_programt::instructionst clustered_asgn_insts;
-		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
-		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-			non_recursive_tgts.insert(tgt);
-			continue;
-		}
-		if (!check_pattern(inst_code, n_sym.symbol_expr())) {
-			assert(false && "out of pattern!");
-		}
-		auto x = dup_body.instructions.begin();
-		advance(x, inst.location_number + 1);
-		x->code.swap(inst_code);
-		dup_body.update();
-	}
-//	dup_body.output(cout);
-//	functions.output(cout);
-	augment_path(loop_header, functions, dup_body);
-//	functions.output(cout);
-	return;
+	auto n_exp = n_sym.symbol_expr();
+	auto lc_ins = dup_body.insert_before(dup_body.instructions.begin());
+	lc_ins->make_assignment();
+	lc_ins->code = code_assignt(n_sym.symbol_expr(),
+			side_effect_expr_nondett(n_sym.type, lc_ins->source_location));
+	auto lc_asump = dup_body.insert_after(lc_ins);
+	lc_asump->make_assumption(binary_relation_exprt(n_exp,
+			ID_ge,
+			from_integer(0, n_exp.type())));
+	auto j_sym = create_symbol("pre_cond_j", signedbv_typet(32));
+	goto_model.symbol_table.insert(j_sym);
+	auto j_exp = j_sym.symbol_expr();
+	auto j_ins = dup_body.insert_after(lc_asump);
+	j_ins->make_assignment();
+	j_ins->code = code_assignt(j_exp,
+			side_effect_expr_nondett(j_sym.type, j_ins->source_location));
+	auto pre_cond_assume2 = dup_body.insert_after(j_ins);
+	pre_cond_assume2->make_assumption(binary_relation_exprt(j_exp,
+			ID_ge,
+			from_integer(0, j_exp.type())));
+	auto pre_cond_assume1 = dup_body.insert_after(pre_cond_assume2);
+	pre_cond_assume1->make_assumption(binary_relation_exprt(j_exp,
+			ID_le,
+			n_exp));
+//	for (auto &inst : assign_insts) {
+//		dup_body.update();
+//		auto &inst_code = to_code_assign(inst.code);
+//		auto tgt = inst_code.lhs();
+//		exprst src_syms;
+//		goto_programt::instructionst clustered_asgn_insts;
+//		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
+//		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+//			non_recursive_tgts.insert(tgt);
+//			continue;
+//		}
+//		if (!check_pattern(inst_code, n_exp)) {
+//			assert(false && "out of pattern!");
+//		}
+//		for (auto &op : loop_cond.operands()) {
+//			if (op == tgt) {
+//				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
+//				op = inst_code.rhs();
+//				cout << "cond befoer2 :: " << from_expr(loop_cond) << endl;
+//			}
+//		}
+//		auto x = dup_body.instructions.begin();
+//		advance(x, inst.location_number + 5);
+////		cout << " inst_code : " << from_expr(inst_code) << endl;
+////		cout << " x_code : " << from_expr(x->code) << endl;
+//		x->code = inst_code;
+//		dup_body.update();
+//	}
+//	fix_loop_cond(loop_cond, n_exp, j_exp);
+	cout << "final cond befoer2 :: " << from_expr(loop_cond) << endl;
+
+//	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
+//	pre_cond_assume->make_goto(loop_sink,
+//			not_exprt(exists_exprt(j_exp,
+//					not_exprt(implies_exprt(and_exprt(binary_relation_exprt(j_exp,
+//							ID_ge,
+//							from_integer(0, j_exp.type())),
+//							binary_relation_exprt(j_exp, ID_le, n_exp)),
+//							loop_cond)))));
+//
+//
+//	augment_path(loop_header, functions, dup_body);
+//	return;
+
+    // z3!
 	for (auto tgt : assign_tgts) {
 		symbol_exprt se = to_symbol_expr(tgt);
 //		cout << se.get_identifier().c_str() << endl;
@@ -379,9 +405,13 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			z3_fire(z3_formula);
 			auto z3_model = get_z3_model("z3_results.dat");
 
-			cout << "Precondition : "
-					<< from_expr(precondition(dup_body))
-					<< endl;
+            exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
+
+            std::cout<< "Made acc expr: " << from_expr(accelerated_func) <<std::endl;
+            
+//			cout << "Precondition : "
+//					<< from_expr(precondition(dup_body))
+//					<< endl;
 		}
 
 	}

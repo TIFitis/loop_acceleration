@@ -23,7 +23,7 @@ class loop_acc::acceleratort {
 			goto_programt&);
 	goto_programt& create_dup_loop(goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
-			goto_programt&);
+			goto_programt&, goto_programt::targett &);
 	void get_all_sources(exprt,
 			goto_programt::instructionst&,
 			exprst&,
@@ -33,7 +33,7 @@ class loop_acc::acceleratort {
 	symbolt create_symbol(std::string, const typet&);
 	std::map<std::string, int> get_z3_model(std::string);
 	bool z3_fire(const std::string&);
-	exprt precondition(goto_programt &);
+//	exprt precondition(goto_programt &);
 	bool check_pattern(code_assignt &, exprt);
 	bool augment_path(goto_programt::targett &loop_header,
 			goto_programt &functions,
