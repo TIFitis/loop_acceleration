@@ -15,6 +15,8 @@ class z3_parse {
 	// need this set for some kind of order
 private:
 
+    std::set<exprt> influ_set;
+
 	std::string buildExprConst(std::set<exprt> &influence,
 			const std::string &const_prefix);
 	std::string buildExprN(std::set<exprt> &influence,
@@ -35,6 +37,7 @@ public:
 			const std::string &my_name,
 			const goto_programt::instructionst assign_insts);
 
+	exprt getAccFunc(exprt& n_e, const std::map<std::string, int>&);
 };
 
 #endif //LOOP_ACCELERATION_Z3_FORMULA_H

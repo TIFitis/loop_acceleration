@@ -1,5 +1,6 @@
 /**
  * Assumption: Only 1 write per variable, and that write is at the end - no reads after that
+ * a<num>_n / a<num>_c, a_N, a_N2
  */
 
 //
@@ -7,6 +8,7 @@
 //
 #include "z3_formula.h"
 #include "accelerator.h"
+#include "../cbmc/src/util/std_expr.h"
 
 std::string z3_parse::buildExprConst(std::set<exprt> &influence,
 		const std::string &const_prefix) {
@@ -90,9 +92,13 @@ std::string z3_parse::buildAssert(std::set<exprt> &influence,
 //	x.append("(assert (<= N 2))\n");
 
 	// Should change the values here using some path exec >..<
+	// Should add something like
 	for (auto a : influence) {
-		x.append("(assert (= 1 " + from_expr(a) + " ))\n");
-	}
+//		x.append("(assert (< 0 " + from_expr(a) + " ))\n");
+//        x.append("(assert (> 10 " + from_expr(a) + " ))\n");
+        x.append("(assert (= 1 " + from_expr(a) + " ))\n");
+
+    }
 
 	x.append("(assert (= " + my_name + "_new " + buildFunc(influence)
 			+ " ))\n");
@@ -156,6 +162,9 @@ std::string z3_parse::buildInsts(const goto_programt::instructionst &assign_inst
 std::string z3_parse::buildFormula(std::set<exprt> &influence,
 		const std::string &my_name,
 		const goto_programt::instructionst assign_insts) {
+
+    this->influ_set = influence;
+
 	std::string x("");
 	x.append(buildInf(influence));
 	std::string c("c");
@@ -168,4 +177,59 @@ std::string z3_parse::buildFormula(std::set<exprt> &influence,
 	x.append("(check-sat)\n(get-model)\n");
 
 	return x;
+}
+
+exprt z3_parse::getAccFunc(exprt& n_e,
+        const std::map<std::string, int>& coeff_vals) {
+    //auto l_e = to_symbol_expr(inst_c.lhs());
+
+    int ctr=0;
+    exprt add_expr_c;
+    // Without N terms
+    for(auto e:this->influ_set){
+        auto x = coeff_vals.find("a"+std::to_string(ctr)+"_c");
+        if(x == coeff_vals.end()){
+            assert(false && "getAccFunc: constant not found in coeff_vals!");
+            return nil_exprt();
+        }
+        auto expr1 = mult_exprt(e, from_integer(x->second, e.type()));
+        if(ctr==0) add_expr_c = expr1;
+        else add_expr_c = plus_exprt(add_expr_c, expr1);
+
+        ctr++;
+    }
+
+    //std::cout<< "Made expr till now: " << from_expr(add_expr_c) <<std::endl;
+
+    // with N terms
+    exprt add_expr_n;
+    ctr=0;
+    for(auto e:this->influ_set){
+        auto x = coeff_vals.find("a"+std::to_string(ctr)+"_n");
+        if(x == coeff_vals.end()){
+            assert(false && "getAccFunc: constant not found in coeff_vals!");
+            return nil_exprt();
+        }
+        auto expr1 = mult_exprt(e, from_integer(x->second, e.type()));
+        if(ctr==0) add_expr_n = expr1;
+        else add_expr_n = plus_exprt(add_expr_c, expr1);
+
+        ctr++;
+    }
+
+    auto x = coeff_vals.find("a_N");
+    if(x == coeff_vals.end()){
+        assert(false && "getAccFunc: constant a_N not found in coeff_vals!");
+        return nil_exprt();
+    }
+    add_expr_n = plus_exprt(add_expr_n, from_integer(x->second, add_expr_c.type()));
+
+    add_expr_n = mult_exprt(add_expr_n, n_e);
+
+    add_expr_c = plus_exprt(add_expr_c, add_expr_n);
+
+    add_expr_c = plus_exprt(add_expr_c, mult_exprt(mult_exprt(n_e, n_e), from_integer(coeff_vals.find("a_N2")->second, add_expr_c.type())));
+
+
+    return add_expr_c;
 }

@@ -197,42 +197,7 @@ bool acceleratort::z3_fire(const string &z3_formula) {
 	return false;
 }
 
-//exprt acceleratort::precondition(goto_programt &goto_prog) {
-//	exprt ret = false_exprt();
-//
-//	for (auto r_it = goto_prog.instructions.rbegin();
-//			r_it != goto_prog.instructions.rend(); ++r_it) {
-//
-//		if (r_it->is_assign()) {
-//			const code_assignt &assignment = to_code_assign(r_it->code);
-//			const exprt &lhs = assignment.lhs();
-//			const exprt &rhs = assignment.rhs();
-//
-//			if (lhs.id() == ID_symbol) {
-//				replace_expr(lhs, rhs, ret);
-//			}
-//			else if (lhs.id() == ID_index || lhs.id() == ID_dereference) {
-//				continue;
-//			}
-//			else {
-//				assert(false && "couldnt find precondition");
-//			}
-//		}
-//		else if (r_it->is_assume() || r_it->is_assert()) {
-//			ret = implies_exprt(r_it->guard, ret);
-//		}
-//		else {
-//		}
-//
-//		if (!r_it->guard.is_true() && !r_it->guard.is_nil()) {
-//			ret = implies_exprt(r_it->guard, ret);
-//		}
-//	}
-//
-//	simplify(ret, namespacet(goto_model.symbol_table));
-//
-//	return ret;
-//}
+
 
 bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	auto l_e = to_symbol_expr(inst_c.lhs());
@@ -356,75 +321,51 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	pre_cond_assume1->make_assumption(binary_relation_exprt(j_exp,
 			ID_le,
 			n_exp));
-	for (auto &inst : assign_insts) {
-		dup_body.update();
-		auto &inst_code = to_code_assign(inst.code);
-		auto tgt = inst_code.lhs();
-		exprst src_syms;
-		goto_programt::instructionst clustered_asgn_insts;
-		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
-		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-			non_recursive_tgts.insert(tgt);
-			continue;
-		}
-		if (!check_pattern(inst_code, n_exp)) {
-			assert(false && "out of pattern!");
-		}
-		for (auto &op : loop_cond.operands()) {
-			if (op == tgt) {
-				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
-				op = inst_code.rhs();
-				cout << "cond befoer2 :: " << from_expr(loop_cond) << endl;
-			}
-		}
-		auto x = dup_body.instructions.begin();
-		advance(x, inst.location_number + 5);
-//		cout << " inst_code : " << from_expr(inst_code) << endl;
-//		cout << " x_code : " << from_expr(x->code) << endl;
-		x->code = inst_code;
-		dup_body.update();
-	}
-	fix_loop_cond(loop_cond, n_exp, j_exp);
+//	for (auto &inst : assign_insts) {
+//		dup_body.update();
+//		auto &inst_code = to_code_assign(inst.code);
+//		auto tgt = inst_code.lhs();
+//		exprst src_syms;
+//		goto_programt::instructionst clustered_asgn_insts;
+//		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
+//		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+//			non_recursive_tgts.insert(tgt);
+//			continue;
+//		}
+//		if (!check_pattern(inst_code, n_exp)) {
+//			assert(false && "out of pattern!");
+//		}
+//		for (auto &op : loop_cond.operands()) {
+//			if (op == tgt) {
+//				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
+//				op = inst_code.rhs();
+//				cout << "cond befoer2 :: " << from_expr(loop_cond) << endl;
+//			}
+//		}
+//		auto x = dup_body.instructions.begin();
+//		advance(x, inst.location_number + 5);
+////		cout << " inst_code : " << from_expr(inst_code) << endl;
+////		cout << " x_code : " << from_expr(x->code) << endl;
+//		x->code = inst_code;
+//		dup_body.update();
+//	}
+//	fix_loop_cond(loop_cond, n_exp, j_exp);
 	cout << "final cond befoer2 :: " << from_expr(loop_cond) << endl;
-
-	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
-	pre_cond_assume->make_goto(loop_sink,
-			not_exprt(exists_exprt(j_exp,
-					not_exprt(implies_exprt(and_exprt(binary_relation_exprt(j_exp,
-							ID_ge,
-							from_integer(0, j_exp.type())),
-							binary_relation_exprt(j_exp, ID_le, n_exp)),
-							loop_cond)))));
 
 //	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
 //	pre_cond_assume->make_goto(loop_sink,
-//			not_exprt(forall_exprt(j_exp,
-//					implies_exprt(and_exprt(binary_relation_exprt(j_exp,
+//			not_exprt(exists_exprt(j_exp,
+//					not_exprt(implies_exprt(and_exprt(binary_relation_exprt(j_exp,
 //							ID_ge,
 //							from_integer(0, j_exp.type())),
 //							binary_relation_exprt(j_exp, ID_le, n_exp)),
-//							loop_cond))));
+//							loop_cond)))));
+//
+//
+//	augment_path(loop_header, functions, dup_body);
+//	return;
 
-//	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
-//	pre_cond_assume->make_assumption(forall_exprt(j_exp,
-//			implies_exprt(and_exprt(binary_relation_exprt(j_exp,
-//					ID_ge,
-//					from_integer(0, j_exp.type())),
-//					binary_relation_exprt(j_exp, ID_le, n_exp)),
-//					loop_cond)));
-
-//	pre_cond_assume->make_assumption(forall_exprt(j_exp,
-//			and_exprt(binary_relation_exprt(j_exp,
-//					ID_ge,
-//					from_integer(0, j_exp.type())),
-//					and_exprt(binary_relation_exprt(j_exp, ID_le, n_exp),
-//							loop_cond))));
-
-//	dup_body.output(cout);
-//	functions.output(cout);
-	augment_path(loop_header, functions, dup_body);
-//	functions.output(cout);
-	return;
+    // z3!
 	for (auto tgt : assign_tgts) {
 		symbol_exprt se = to_symbol_expr(tgt);
 //		cout << se.get_identifier().c_str() << endl;
@@ -464,6 +405,10 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			z3_fire(z3_formula);
 			auto z3_model = get_z3_model("z3_results.dat");
 
+            exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
+
+            std::cout<< "Made acc expr: " << from_expr(accelerated_func) <<std::endl;
+            
 //			cout << "Precondition : "
 //					<< from_expr(precondition(dup_body))
 //					<< endl;
