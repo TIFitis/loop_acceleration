@@ -110,14 +110,19 @@ void acceleratort::get_all_sources(exprt tgt,
 	}
 }
 
-symbolt acceleratort::create_symbol(string name, const typet &type) {
+symbolt acceleratort::create_symbol(string name,
+		const typet &type,
+		bool force) {
 	symbolt symbol;
 	static unsigned var_counter;
 	symbol.is_file_local = true;
 	symbol.is_thread_local = true;
 	symbol.is_lvalue = true;
 
-	symbol.name = name + to_string(var_counter);
+	if (force)
+		symbol.name = name;
+	else
+		symbol.name = name + to_string(var_counter);
 	symbol.base_name = symbol.name;
 	var_counter++;
 	symbol.type = type;
@@ -157,48 +162,6 @@ typet join_types(const typet &t1, const typet &t2) {
 	assert(false && "Unhandled join types");
 }
 
-map<string, int> acceleratort::get_z3_model(string filename) {
-	FILE *fp;
-	fp = fopen(filename.c_str(), "r");
-	assert(fp != nullptr && "Could not open z3_results.dat file");
-	char s[4096];
-	string raw_input = "";
-	while (fgets(s, 4096, fp))
-		raw_input += s;
-	fclose(fp);
-	map<string, int> values;
-	while (1) {
-		auto loc = raw_input.find("define-fun");
-		if (loc == raw_input.npos) break;
-		raw_input = raw_input.substr(loc + 11, raw_input.npos);
-		loc = raw_input.find(" ");
-		auto name = raw_input.substr(0, loc);
-		loc = raw_input.find("Int");
-		raw_input = raw_input.substr(loc + 8, raw_input.npos);
-		loc = raw_input.find(")");
-		auto val_s = raw_input.substr(0, loc);
-		stringstream val_ss(val_s);
-		int x = 0;
-		val_ss >> x;
-		values[name] = x;
-	}
-	for (auto a : values)
-		cout << a.first << "::" << a.second << endl;
-	return values;
-}
-
-bool acceleratort::z3_fire(const string &z3_formula) {
-	FILE *fp = fopen("z3_input.smt", "w");
-	assert(fp != nullptr && "couldnt create input file for z3");
-	fputs(z3_formula.c_str(), fp);
-	fclose(fp);
-	string z3_command = "z3 -smt2 z3_input.smt > z3_results.dat";
-	system(z3_command.c_str());
-	return false;
-}
-
-
-
 bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	auto l_e = to_symbol_expr(inst_c.lhs());
 	auto r_e = inst_c.rhs();
@@ -218,17 +181,6 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 				else {
 					auto mod_expr = plus_exprt(e0, mult_exprt(e1, n_e));
 					inst_c.rhs() = mod_expr;
-//					cout << "e0 : "
-//							<< e0.type().id().c_str()
-//							<< "\ne1 : "
-//							<< e1.type().id().c_str()
-//							<< "\nn_e : "
-//							<< n_e.type().id().c_str()
-//							<< "\nlhs : "
-//							<< inst_c.lhs().type().id().c_str()
-//							<< "\nrhs : "
-//							<< inst_c.rhs().type().id().c_str()
-//							<< endl;
 					inst_c = code_assignt(inst_c.lhs(), mod_expr);
 					return true;
 				}
@@ -251,38 +203,111 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 			side_effect_expr_nondett(bool_typet(), split->source_location));
 	split->code = code_gotot();
 	functions.update();
-//	cout << "done 1" << endl;
 	functions.destructive_insert(loop_header, aux_path);
 	functions.update();
-//	cout << "done 2" << endl;
 	return true;
 }
 
-void fix_loop_cond(exprt &l_c, exprt &n_e, exprt &j_e) {
+void swap_all(exprt &l_c, exprt &n_e, exprt &j_e) {
 	for (auto &op : l_c.operands()) {
-		cout << "here1 :: " << from_expr(op) << endl;
 		if (op == n_e) {
 			op = j_e;
 		}
-		fix_loop_cond(op, n_e, j_e);
+		swap_all(op, n_e, j_e);
 	}
 }
+
+void acceleratort::precondition(goto_programt &g_p,
+		goto_programt::targett loc,
+		goto_programt::targett sink,
+		exprt loop_cond) {
+	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
+	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+	auto n_asgn = g_p.insert_before(loc);
+	n_asgn->make_assignment();
+	n_asgn->code = code_assignt(n_exp,
+			side_effect_expr_nondett(n_exp.type(), n_asgn->source_location));
+	auto n_ge_1 = g_p.insert_after(n_asgn);
+	n_ge_1->make_assumption(binary_relation_exprt(n_exp,
+			ID_ge,
+			from_integer(1, n_exp.type())));
+	auto j_asgn = g_p.insert_after(n_ge_1);
+	j_asgn->make_assignment();
+	j_asgn->code = code_assignt(j_exp,
+			side_effect_expr_nondett(j_exp.type(), j_asgn->source_location));
+	auto j_ge_0 = g_p.insert_after(j_asgn);
+	j_ge_0->make_assumption(binary_relation_exprt(j_exp,
+			ID_ge,
+			from_integer(0, j_exp.type())));
+	auto j_lt_n = g_p.insert_after(j_ge_0);
+	j_lt_n->make_assumption(binary_relation_exprt(j_exp, ID_lt, n_exp));
+	auto forall_assump = g_p.insert_after(j_lt_n);
+	forall_assump->make_goto(sink,
+			forall_exprt(j_exp,
+					and_exprt(and_exprt(binary_relation_exprt(j_exp,
+							ID_ge,
+							from_integer(0, j_exp.type())),
+							binary_relation_exprt(j_exp, ID_le, n_exp)),
+							loop_cond)));
+}
+
+bool acceleratort::syntactic_matching(goto_programt &g_p,
+		goto_programt::instructionst &assign_insts,
+		exprt loop_cond,
+		goto_programt::targett sink) {
+	goto_programt g_p_c;
+	g_p_c.copy_from(g_p);
+	goto_programt::instructionst assign_insts_c = assign_insts;
+	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
+	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+	for (auto &inst : assign_insts_c) {
+		g_p_c.update();
+		auto &inst_code = to_code_assign(inst.code);
+		auto tgt = inst_code.lhs();
+		exprst src_syms;
+		goto_programt::instructionst clustered_asgn_insts;
+		get_all_sources(tgt, assign_insts_c, src_syms, clustered_asgn_insts);
+		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+			continue;
+		}
+		if (!check_pattern(inst_code, n_exp)) {
+			return false;
+		}
+		swap_all(loop_cond, tgt, inst_code.rhs());
+		auto x = g_p_c.instructions.begin();
+		advance(x, inst.location_number);
+		x->code = inst_code;
+		g_p_c.update();
+	}
+	g_p.copy_from(g_p_c);
+	g_p.update();
+	assign_insts = assign_insts_c;
+	swap_all(loop_cond, n_exp, j_exp);
+	goto_programt::targett si = g_p.instructions.begin();
+	for (auto x = g_p.instructions.begin(), e = g_p.instructions.end(); e != x;
+			) {
+		x++;
+		if (x != e) si++;
+	}
+	precondition(g_p, g_p.instructions.begin(), si, loop_cond);
+	g_p.update();
+	return true;
+}
+
+//bool constraint_accelerator() {
+//
+//}
 
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
-	goto_programt::targett loop_sink;
-	auto &dup_body = create_dup_loop(loop_header, loop, functions, loop_sink);
+	goto_programt::targett sink;
+	auto &dup_body = create_dup_loop(loop_header, loop, functions, sink);
 	auto dup_body_iter = dup_body.instructions.begin();
 	exprt loop_cond;
 	if (loop_header->is_goto()) {
-		cout << "Cond :: "
-				<< from_expr(to_not_expr(loop_header->guard).op0())
-				<< endl;
-		loop_cond = to_not_expr(loop_header->guard).op0();
+		loop_cond = not_exprt(loop_header->guard);
 	}
-//	cout << "After\n==============================\n";
-//	dup_body.output(cout);
 	goto_programt::instructionst assign_insts;
 	exprst assign_tgts;
 	for (auto inst_it = dup_body.instructions.begin(), inst_end =
@@ -294,126 +319,57 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 			assign_tgts.insert(x.lhs());
 		}
 	}
-	exprst non_recursive_tgts;
-	auto n_sym = create_symbol("loop_counter", signedbv_typet(32));
+	auto n_sym = create_symbol(ACC_N, signedbv_typet(32), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();
-	auto lc_ins = dup_body.insert_before(dup_body.instructions.begin());
-	lc_ins->make_assignment();
-	lc_ins->code = code_assignt(n_sym.symbol_expr(),
-			side_effect_expr_nondett(n_sym.type, lc_ins->source_location));
-	auto lc_asump = dup_body.insert_after(lc_ins);
-	lc_asump->make_assumption(binary_relation_exprt(n_exp,
-			ID_ge,
-			from_integer(0, n_exp.type())));
-	auto j_sym = create_symbol("pre_cond_j", signedbv_typet(32));
+	auto j_sym = create_symbol(ACC_J, signedbv_typet(32), true);
 	goto_model.symbol_table.insert(j_sym);
 	auto j_exp = j_sym.symbol_expr();
-	auto j_ins = dup_body.insert_after(lc_asump);
-	j_ins->make_assignment();
-	j_ins->code = code_assignt(j_exp,
-			side_effect_expr_nondett(j_sym.type, j_ins->source_location));
-	auto pre_cond_assume2 = dup_body.insert_after(j_ins);
-	pre_cond_assume2->make_assumption(binary_relation_exprt(j_exp,
-			ID_ge,
-			from_integer(0, j_exp.type())));
-	auto pre_cond_assume1 = dup_body.insert_after(pre_cond_assume2);
-	pre_cond_assume1->make_assumption(binary_relation_exprt(j_exp,
-			ID_le,
-			n_exp));
-//	for (auto &inst : assign_insts) {
-//		dup_body.update();
-//		auto &inst_code = to_code_assign(inst.code);
-//		auto tgt = inst_code.lhs();
-//		exprst src_syms;
-//		goto_programt::instructionst clustered_asgn_insts;
-//		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
-//		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-//			non_recursive_tgts.insert(tgt);
-//			continue;
-//		}
-//		if (!check_pattern(inst_code, n_exp)) {
-//			assert(false && "out of pattern!");
-//		}
-//		for (auto &op : loop_cond.operands()) {
-//			if (op == tgt) {
-//				cout << "cond befoer :: " << from_expr(loop_cond) << endl;
-//				op = inst_code.rhs();
-//				cout << "cond befoer2 :: " << from_expr(loop_cond) << endl;
-//			}
-//		}
-//		auto x = dup_body.instructions.begin();
-//		advance(x, inst.location_number + 5);
-////		cout << " inst_code : " << from_expr(inst_code) << endl;
-////		cout << " x_code : " << from_expr(x->code) << endl;
-//		x->code = inst_code;
-//		dup_body.update();
-//	}
-//	fix_loop_cond(loop_cond, n_exp, j_exp);
-	cout << "final cond befoer2 :: " << from_expr(loop_cond) << endl;
 
-//	auto pre_cond_assume = dup_body.insert_after(pre_cond_assume1);
-//	pre_cond_assume->make_goto(loop_sink,
-//			not_exprt(exists_exprt(j_exp,
-//					not_exprt(implies_exprt(and_exprt(binary_relation_exprt(j_exp,
-//							ID_ge,
-//							from_integer(0, j_exp.type())),
-//							binary_relation_exprt(j_exp, ID_le, n_exp)),
-//							loop_cond)))));
-//
-//
-//	augment_path(loop_header, functions, dup_body);
-//	return;
-
-    // z3!
-	for (auto tgt : assign_tgts) {
-		symbol_exprt se = to_symbol_expr(tgt);
-//		cout << se.get_identifier().c_str() << endl;
-
-//		cout << "doing stuff for :: " << from_expr(tgt) << endl << endl;
-		exprst src_syms;
-		goto_programt::instructionst clustered_asgn_insts;
-		get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
-		cout << "src_syms : " << endl;
-//		for (auto a : src_syms)
-//			cout << from_expr(a) << ", ";
-//		cout << "\n clustered_asgn_insts : " << endl;
-//		for (auto a : clustered_asgn_insts)
-//			cout << from_expr(a.code) << endl;
-		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-			non_recursive_tgts.insert(tgt);
-			continue;
-		}
-		else {
-			//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
-			// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
-			// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
-			// Todo: Also add each instruction constraint to the z3_parser!
-			std::set<exprt> inf;
-			for (auto a : src_syms)
-				inf.insert(a);
-			z3_parse parser { };
-			goto_programt::instructionst tgt_asgn_insts;
-			for (auto &inst : assign_insts) {
-				auto &inst_code = to_code_assign(inst.code);
-				if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
+	if (syntactic_matching(dup_body, assign_insts, loop_cond, sink)) {
+		cout << "Syntacting Matching accelerated :: " << endl;
+		augment_path(loop_header, functions, dup_body);
+		return;
+	}
+	else {
+		for (auto tgt : assign_tgts) {
+			symbol_exprt se = to_symbol_expr(tgt);
+			exprst src_syms;
+			goto_programt::instructionst clustered_asgn_insts;
+			get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
+			cout << "src_syms : " << endl;
+			if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+				continue;
 			}
-			auto z3_formula = parser.buildFormula(inf,
-					from_expr(tgt),
-					tgt_asgn_insts);
-			cout << z3_formula << endl;
-			z3_fire(z3_formula);
-			auto z3_model = get_z3_model("z3_results.dat");
+			else {
+				//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+				// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
+				// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
+				// Todo: Also add each instruction constraint to the z3_parser!
+				std::set<exprt> inf;
+				for (auto a : src_syms)
+					inf.insert(a);
+				z3_parse parser { };
+				goto_programt::instructionst tgt_asgn_insts;
+				for (auto &inst : assign_insts) {
+					auto &inst_code = to_code_assign(inst.code);
+					if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
+				}
+				auto z3_formula = parser.buildFormula(inf,
+						from_expr(tgt),
+						tgt_asgn_insts);
+				cout << z3_formula << endl;
+				parser.z3_fire(z3_formula);
+				auto z3_model = parser.get_z3_model("z3_results.dat");
 
-            exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
+				exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
 
-            std::cout<< "Made acc expr: " << from_expr(accelerated_func) <<std::endl;
-            
-//			cout << "Precondition : "
-//					<< from_expr(precondition(dup_body))
-//					<< endl;
+				std::cout << "Made acc expr: "
+						<< from_expr(accelerated_func)
+						<< std::endl;
+			}
+
 		}
-
 	}
 }
 

@@ -91,14 +91,14 @@ std::string z3_parse::buildAssert(std::set<exprt> &influence,
 //	x.append("(assert (>= N 0))\n");
 //	x.append("(assert (<= N 2))\n");
 
-	// Should change the values here using some path exec >..<
-	// Should add something like
+// Should change the values here using some path exec >..<
+// Should add something like
 	for (auto a : influence) {
 //		x.append("(assert (< 0 " + from_expr(a) + " ))\n");
 //        x.append("(assert (> 10 " + from_expr(a) + " ))\n");
-        x.append("(assert (= 1 " + from_expr(a) + " ))\n");
+		x.append("(assert (= 1 " + from_expr(a) + " ))\n");
 
-    }
+	}
 
 	x.append("(assert (= " + my_name + "_new " + buildFunc(influence)
 			+ " ))\n");
@@ -163,7 +163,7 @@ std::string z3_parse::buildFormula(std::set<exprt> &influence,
 		const std::string &my_name,
 		const goto_programt::instructionst assign_insts) {
 
-    this->influ_set = influence;
+	this->influ_set = influence;
 
 	std::string x("");
 	x.append(buildInf(influence));
@@ -179,57 +179,104 @@ std::string z3_parse::buildFormula(std::set<exprt> &influence,
 	return x;
 }
 
-exprt z3_parse::getAccFunc(exprt& n_e,
-        const std::map<std::string, int>& coeff_vals) {
-    //auto l_e = to_symbol_expr(inst_c.lhs());
+bool z3_parse::z3_fire(const std::string &z3_formula) {
+	FILE *fp = fopen("z3_input.smt", "w");
+	assert(fp != nullptr && "couldnt create input file for z3");
+	fputs(z3_formula.c_str(), fp);
+	fclose(fp);
+	std::string z3_command = "z3 -smt2 z3_input.smt > z3_results.dat";
+	system(z3_command.c_str());
+	return false;
+}
 
-    int ctr=0;
-    exprt add_expr_c;
-    // Without N terms
-    for(auto e:this->influ_set){
-        auto x = coeff_vals.find("a"+std::to_string(ctr)+"_c");
-        if(x == coeff_vals.end()){
-            assert(false && "getAccFunc: constant not found in coeff_vals!");
-            return nil_exprt();
-        }
-        auto expr1 = mult_exprt(e, from_integer(x->second, e.type()));
-        if(ctr==0) add_expr_c = expr1;
-        else add_expr_c = plus_exprt(add_expr_c, expr1);
+std::map<std::string, int> z3_parse::get_z3_model(std::string filename) {
+	FILE *fp;
+	fp = fopen(filename.c_str(), "r");
+	assert(fp != nullptr && "Could not open z3_results.dat file");
+	char s[4096];
+	std::string raw_input = "";
+	while (fgets(s, 4096, fp))
+		raw_input += s;
+	fclose(fp);
+	std::map<std::string, int> values;
+	while (1) {
+		auto loc = raw_input.find("define-fun");
+		if (loc == raw_input.npos) break;
+		raw_input = raw_input.substr(loc + 11, raw_input.npos);
+		loc = raw_input.find(" ");
+		auto name = raw_input.substr(0, loc);
+		loc = raw_input.find("Int");
+		raw_input = raw_input.substr(loc + 8, raw_input.npos);
+		loc = raw_input.find(")");
+		auto val_s = raw_input.substr(0, loc);
+		std::stringstream val_ss(val_s);
+		int x = 0;
+		val_ss >> x;
+		values[name] = x;
+	}
+	for (auto a : values)
+		std::cout << a.first << "::" << a.second << std::endl;
+	return values;
+}
 
-        ctr++;
-    }
+exprt z3_parse::getAccFunc(exprt &n_e,
+		const std::map<std::string, int> &coeff_vals) {
+	//auto l_e = to_symbol_expr(inst_c.lhs());
 
-    //std::cout<< "Made expr till now: " << from_expr(add_expr_c) <<std::endl;
+	int ctr = 0;
+	exprt add_expr_c;
+	// Without N terms
+	for (auto e : this->influ_set) {
+		auto x = coeff_vals.find("a" + std::to_string(ctr) + "_c");
+		if (x == coeff_vals.end()) {
+			assert(false && "getAccFunc: constant not found in coeff_vals!");
+			return nil_exprt();
+		}
+		auto expr1 = mult_exprt(e, from_integer(x->second, e.type()));
+		if (ctr == 0)
+			add_expr_c = expr1;
+		else
+			add_expr_c = plus_exprt(add_expr_c, expr1);
 
-    // with N terms
-    exprt add_expr_n;
-    ctr=0;
-    for(auto e:this->influ_set){
-        auto x = coeff_vals.find("a"+std::to_string(ctr)+"_n");
-        if(x == coeff_vals.end()){
-            assert(false && "getAccFunc: constant not found in coeff_vals!");
-            return nil_exprt();
-        }
-        auto expr1 = mult_exprt(e, from_integer(x->second, e.type()));
-        if(ctr==0) add_expr_n = expr1;
-        else add_expr_n = plus_exprt(add_expr_c, expr1);
+		ctr++;
+	}
 
-        ctr++;
-    }
+	//std::cout<< "Made expr till now: " << from_expr(add_expr_c) <<std::endl;
 
-    auto x = coeff_vals.find("a_N");
-    if(x == coeff_vals.end()){
-        assert(false && "getAccFunc: constant a_N not found in coeff_vals!");
-        return nil_exprt();
-    }
-    add_expr_n = plus_exprt(add_expr_n, from_integer(x->second, add_expr_c.type()));
+	// with N terms
+	exprt add_expr_n;
+	ctr = 0;
+	for (auto e : this->influ_set) {
+		auto x = coeff_vals.find("a" + std::to_string(ctr) + "_n");
+		if (x == coeff_vals.end()) {
+			assert(false && "getAccFunc: constant not found in coeff_vals!");
+			return nil_exprt();
+		}
+		auto expr1 = mult_exprt(e, from_integer(x->second, e.type()));
+		if (ctr == 0)
+			add_expr_n = expr1;
+		else
+			add_expr_n = plus_exprt(add_expr_c, expr1);
 
-    add_expr_n = mult_exprt(add_expr_n, n_e);
+		ctr++;
+	}
 
-    add_expr_c = plus_exprt(add_expr_c, add_expr_n);
+	auto x = coeff_vals.find("a_N");
+	if (x == coeff_vals.end()) {
+		assert(false && "getAccFunc: constant a_N not found in coeff_vals!");
+		return nil_exprt();
+	}
+	add_expr_n = plus_exprt(add_expr_n,
+			from_integer(x->second, add_expr_c.type()));
 
-    add_expr_c = plus_exprt(add_expr_c, mult_exprt(mult_exprt(n_e, n_e), from_integer(coeff_vals.find("a_N2")->second, add_expr_c.type())));
+	add_expr_n = mult_exprt(add_expr_n, n_e);
 
+	add_expr_c = plus_exprt(add_expr_c, add_expr_n);
 
-    return add_expr_c;
+	add_expr_c = plus_exprt(add_expr_c,
+			mult_exprt(mult_exprt(n_e, n_e),
+					from_integer(coeff_vals.find("a_N2")->second,
+							add_expr_c.type())));
+
+	return add_expr_c;
 }

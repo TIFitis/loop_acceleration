@@ -10,6 +10,9 @@
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
 
+#define ACC_N "acc_n"
+#define ACC_J "acc_j"
+
 typedef std::unordered_set<exprt, irep_hash> exprst;
 
 class loop_acc::acceleratort {
@@ -30,14 +33,19 @@ class loop_acc::acceleratort {
 			goto_programt::instructionst&);
 	exprst gather_syms(exprt);
 	void get_loops();
-	symbolt create_symbol(std::string, const typet&);
-	std::map<std::string, int> get_z3_model(std::string);
-	bool z3_fire(const std::string&);
-//	exprt precondition(goto_programt &);
+	symbolt create_symbol(std::string, const typet&, bool force = false);
+	void precondition(goto_programt &g_p,
+			goto_programt::targett loc,
+			goto_programt::targett sink,
+			exprt loop_cond);
 	bool check_pattern(code_assignt &, exprt);
 	bool augment_path(goto_programt::targett &loop_header,
 			goto_programt &functions,
 			goto_programt &aux_path);
+	bool syntactic_matching(goto_programt &g_p,
+			goto_programt::instructionst &assign_insts,
+			exprt loop_cond,
+			goto_programt::targett sink);
 public:
 	acceleratort(goto_modelt &goto_model) :
 			goto_model(goto_model) {
