@@ -106,10 +106,17 @@ std::string z3_parse::buildAssert(std::set<exprt> &influence,
 	return x;
 }
 
-std::string z3_parse::generate_arith(exprt expr) {
+std::string z3_parse::generate_arith(exprt expr,
+		std::string s1,
+		std::string s2) {
 	std::string s = "";
+	std::string exp_s = from_expr(expr);
 	if (can_cast_expr<symbol_exprt>(expr)) {
-		s.append(from_expr(expr));
+		if (!from_expr(expr).compare(s1)) {
+			s.append(s2);
+		}
+		else
+			s.append(from_expr(expr));
 	}
 	else if (can_cast_expr<constant_exprt>(expr)) {
 		auto const_expr = to_constant_expr(expr);
@@ -118,25 +125,25 @@ std::string z3_parse::generate_arith(exprt expr) {
 	else if (can_cast_expr<plus_exprt>(expr)) {
 		auto plus_expr = to_plus_expr(expr);
 		s.append("(+ " + generate_arith(plus_expr.op0()) + " "
-				+ generate_arith(plus_expr.op1()) + ")");
+				+ generate_arith(plus_expr.op1(), s1, s2) + ")");
 
 	}
 	else if (can_cast_expr<minus_exprt>(expr)) {
 		auto minus_expr = to_minus_expr(expr);
-		s.append("(- " + generate_arith(minus_expr.op0()) + " "
-				+ generate_arith(minus_expr.op1()) + ")");
+		s.append("(- " + generate_arith(minus_expr.op0(), s1, s2) + " "
+				+ generate_arith(minus_expr.op1(), s1, s2) + ")");
 
 	}
 	else if (can_cast_expr<mult_exprt>(expr)) {
 		auto mult_expr = to_mult_expr(expr);
-		s.append("(* " + generate_arith(mult_expr.op0()) + " "
-				+ generate_arith(mult_expr.op1()) + ")");
+		s.append("(* " + generate_arith(mult_expr.op0(), s1, s2) + " "
+				+ generate_arith(mult_expr.op1(), s1, s2) + ")");
 
 	}
 	else if (can_cast_expr<div_exprt>(expr)) {
 		auto mult_expr = to_div_expr(expr);
-		s.append("(/ " + generate_arith(mult_expr.op0()) + " "
-				+ generate_arith(mult_expr.op1()) + ")");
+		s.append("(/ " + generate_arith(mult_expr.op0(), s1, s2) + " "
+				+ generate_arith(mult_expr.op1(), s1, s2) + ")");
 
 	}
 	else {
@@ -179,10 +186,114 @@ std::string z3_parse::buildFormula(std::set<exprt> &influence,
 	return x;
 }
 
+void z3_parse::build_input_set(unsigned k) {
+	while (input_set[0].size() < (k + 1)) {
+		for (auto &a : input_set) {
+			if (a[0] == 2) {
+				a.push_back(1);
+			}
+			else
+				a.push_back(0);
+		}
+		std::vector<int> n1(input_set[0].size(), 0);
+		n1.back() = 1;
+		input_set.push_back(n1);
+		n1[0] = 1;
+		input_set.push_back(n1);
+	}
+}
+
+void z3_parse::add_alpha_decl(unsigned k) {
+	for (unsigned i = 1; i <= 2 * (k + 1); i++)
+		formula.append("(declare-const alpha_" + std::to_string(i) + " Int)\n");
+}
+
+//void z3_parse::add_assert(exprt tgt, exprst src_syms, unsigned k) {
+//	for (unsigned i = 1; i <= k; i++)
+//		formula.append("(declare-const alpha_" + std::to_string(i) + " Int)\n");
+//}
+
+void z3_parse::new_build(exprst &influence,
+		exprt x,
+		const goto_programt::instructionst &assign_insts,
+		code_assignt &inst) {
+	unsigned k = influence.size();
+	build_input_set(k);
+	add_alpha_decl(k);
+	std::cout << "=================================" << std::endl;
+//	std::vector<unsigned> ssa_nums(k);
+	for (unsigned i = 0; i < 2 * (k + 1); i++) {
+		auto n_val = input_set[i][0];
+		std::string n_str = std::to_string(input_set[i][0]);
+		std::string temp1;
+		for (unsigned j = 0; j < k; j++) {
+			if (j > 0) {
+				temp1 = "(+ " + temp1 + " (* alpha_" + std::to_string(j + 1)
+						+ " " + std::to_string(input_set[i][j + 1]) + "))";
+			}
+			else
+				temp1 = "(* alpha_" + std::to_string(j + 1) + " "
+						+ std::to_string(input_set[i][j + 1]) + ")";
+		}
+		std::string temp2;
+		for (unsigned j = 0; j < k; j++) {
+			if (j > 0) {
+				temp2 = "(+ " + temp2 + " (* alpha_" + std::to_string(k + j + 1)
+						+ " " + std::to_string(input_set[i][j + 1]) + ") "
+						+ ")";
+			}
+			else
+				temp2 = "(* alpha_" + std::to_string(k + j + 1) + " "
+						+ std::to_string(input_set[i][j + 1]) + ")";
+		}
+		temp2 = "(* " + temp2 + " " + n_str + ")";
+		temp1 = "(+ " + temp1 + " " + temp2 + ")";
+		temp1 = "(+ " + temp1 + " (* alpha_" + std::to_string(2 * k + 1) + " "
+				+ n_str + "))";
+
+		temp1 = "(+ " + temp1 + " (* alpha_" + std::to_string(2 * (k + 1)) + " "
+				+ "(* " + n_str + " " + n_str + ")))";
+		std::string rhs;
+		if (n_val == 0) {
+			rhs = std::to_string(input_set[i][1]);
+		}
+		else if (n_val == 1) {
+			rhs = generate_arith(inst.rhs(),
+					from_expr(x),
+					std::to_string(input_set[i][1]));
+		}
+		else if (n_val == 2) {
+			rhs = generate_arith(inst.rhs(),
+					from_expr(x),
+					std::to_string(input_set[i][1]));
+			formula.append("(assert (= acc_" + std::to_string(i + 1) + " " + rhs
+					+ "))\n");
+			rhs = generate_arith(inst.rhs(),
+					from_expr(x),
+					"acc_" + std::to_string(i + 1));
+		}
+		temp1 = "(= " + rhs + " " + temp1 + ")";
+		temp1 = "(assert " + temp1 + ")\n";
+		formula.append(temp1);
+	}
+	std::cout << formula << std::endl;
+}
+
 bool z3_parse::z3_fire(const std::string &z3_formula) {
 	FILE *fp = fopen("z3_input.smt", "w");
 	assert(fp != nullptr && "couldnt create input file for z3");
 	fputs(z3_formula.c_str(), fp);
+	fclose(fp);
+	std::string z3_command = "z3 -smt2 z3_input.smt > z3_results.dat";
+	system(z3_command.c_str());
+	return false;
+}
+
+bool z3_parse::z3_fire() {
+	FILE *fp = fopen("z3_input.smt", "w");
+	assert(fp != nullptr && "couldnt create input file for z3");
+	formula.append("(check-sat)\n(get-model)\n");
+	fputs(formula.c_str(), fp);
 	fclose(fp);
 	std::string z3_command = "z3 -smt2 z3_input.smt > z3_results.dat";
 	system(z3_command.c_str());
@@ -221,11 +332,11 @@ std::map<std::string, int> z3_parse::get_z3_model(std::string filename) {
 
 exprt z3_parse::getAccFunc(exprt &n_e,
 		const std::map<std::string, int> &coeff_vals) {
-	//auto l_e = to_symbol_expr(inst_c.lhs());
+//auto l_e = to_symbol_expr(inst_c.lhs());
 
 	int ctr = 0;
 	exprt add_expr_c;
-	// Without N terms
+// Without N terms
 	for (auto e : this->influ_set) {
 		auto x = coeff_vals.find("a" + std::to_string(ctr) + "_c");
 		if (x == coeff_vals.end()) {
@@ -241,9 +352,9 @@ exprt z3_parse::getAccFunc(exprt &n_e,
 		ctr++;
 	}
 
-	//std::cout<< "Made expr till now: " << from_expr(add_expr_c) <<std::endl;
+//std::cout<< "Made expr till now: " << from_expr(add_expr_c) <<std::endl;
 
-	// with N terms
+// with N terms
 	exprt add_expr_n;
 	ctr = 0;
 	for (auto e : this->influ_set) {
