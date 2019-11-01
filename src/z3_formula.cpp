@@ -119,8 +119,9 @@ std::string z3_parse::generate_arith(exprt expr,
 			s.append(from_expr(expr));
 	}
 	else if (can_cast_expr<constant_exprt>(expr)) {
-		auto const_expr = to_constant_expr(expr);
-		s.append(const_expr.get_value().c_str());
+//		auto const_expr = to_constant_expr(expr);
+//		s.append(const_expr.get_value().c_str());
+		s.append(from_expr(expr));
 	}
 	else if (can_cast_expr<plus_exprt>(expr)) {
 		auto plus_expr = to_plus_expr(expr);
@@ -226,9 +227,9 @@ std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts
 		for (auto a : assign_insts_o)
 			assign_insts.push_back(a);
 	}
-//	std::cout << "before ssa ====================\n\n";
-//	for (auto a : assign_insts)
-//		std::cout << from_expr(a.code) << std::endl;
+	std::cout << "before ssa ====================\n\n";
+	for (auto a : assign_insts)
+		std::cout << from_expr(a.code) << std::endl;
 	unsigned i = 1;
 	for (auto e : loop_vars) {
 		k_vars[from_expr(e)] = i;
@@ -271,7 +272,9 @@ std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts
 			it2->code.op1().swap(temp);
 		}
 	}
-//	std::cout << "\n\nPure Bliss====================\n";
+	std::cout << "\n\nPure Bliss====================\n";
+	for (auto a : assign_insts)
+		std::cout << from_expr(a.code) << std::endl;
 	for (auto a : assign_insts) {
 		std::string t1 = "(declare-const " + from_expr(a.code.op0())
 				+ " Int)\n";
