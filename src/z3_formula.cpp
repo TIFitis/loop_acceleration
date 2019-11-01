@@ -213,15 +213,88 @@ void z3_parse::add_alpha_decl(unsigned k) {
 //		formula.append("(declare-const alpha_" + std::to_string(i) + " Int)\n");
 //}
 
-void z3_parse::new_build(exprst &influence,
+std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts_o,
+		const goto_programt::instructiont &tgt_inst,
+		const exprst &loop_vars,
+		unsigned eq_n) {
+	std::string ret_str;
+	static unsigned ssa_count;
+	std::map<std::string, unsigned> k_vars;
+	auto eq_n_str = std::to_string(eq_n) + "_";
+	auto assign_insts = assign_insts_o;
+	if (input_set[eq_n][0] == 2) {
+		for (auto a : assign_insts_o)
+			assign_insts.push_back(a);
+	}
+//	std::cout << "before ssa ====================\n\n";
+//	for (auto a : assign_insts)
+//		std::cout << from_expr(a.code) << std::endl;
+	unsigned i = 1;
+	for (auto e : loop_vars) {
+		k_vars[from_expr(e)] = i;
+		i++;
+	}
+	exprst my_syms;
+	for (auto it = assign_insts.begin(), it_e = assign_insts.end(); it != it_e;
+			) {
+		auto ins_c = to_code_assign(it->code);
+		auto rhs_e = ins_c.rhs();
+		exprst rhs_syms;
+		loop_acc::acceleratort::gather_syms(rhs_e, rhs_syms);
+		for (auto &a : rhs_syms) {
+			if (my_syms.find(a) != my_syms.end()) {
+				rhs_syms.erase(a);
+			}
+		}
+		for (auto sym : rhs_syms) {
+			auto ip_val = from_integer(input_set[eq_n][k_vars[from_expr(sym)]],
+					sym.type());
+			loop_acc::acceleratort::swap_all(rhs_e, sym, ip_val);
+		}
+		auto lhs = from_expr(ins_c.lhs());
+		lhs = "acc_" + eq_n_str + std::to_string(ssa_count) + lhs;
+		ssa_count++;
+		auto n_lhs_sym = loop_acc::acceleratort::create_symbol(lhs,
+				ins_c.lhs().type(),
+				true).symbol_expr();
+		my_syms.insert(n_lhs_sym);
+		auto new_copy = n_lhs_sym;
+		it->code.op0().swap(n_lhs_sym);
+		it->code.op1().swap(rhs_e);
+		if (it->location_number == tgt_inst.location_number) {
+			ret_str = lhs;
+		}
+		it++;
+		for (auto it2 = it, it_e2 = assign_insts.end(); it2 != it_e2; it2++) {
+			auto temp = it2->code.op1();
+			loop_acc::acceleratort::swap_all(temp, ins_c.lhs(), new_copy);
+			it2->code.op1().swap(temp);
+		}
+	}
+//	std::cout << "\n\nPure Bliss====================\n";
+	for (auto a : assign_insts) {
+		std::string t1 = "(declare-const " + from_expr(a.code.op0())
+				+ " Int)\n";
+		formula.append(t1);
+	}
+	for (auto a : assign_insts) {
+		std::string t1 = "(assert (= " + from_expr(a.code.op0()) + " "
+				+ generate_arith(a.code.op1()) + "))\n";
+		formula.append(t1);
+	}
+	return ret_str;
+}
+
+void z3_parse::new_build(exprst &loop_vars,
 		exprt x,
 		const goto_programt::instructionst &assign_insts,
-		code_assignt &inst) {
-	unsigned k = influence.size();
+		goto_programt::instructiont &tgt_inst) {
+	auto inst = to_code_assign(tgt_inst.code);
+	unsigned k = loop_vars.size();
 	build_input_set(k);
 	add_alpha_decl(k);
 	std::cout << "=================================" << std::endl;
-//	std::vector<unsigned> ssa_nums(k);
+	std::map<std::string, unsigned> ssa_vals;
 	for (unsigned i = 0; i < 2 * (k + 1); i++) {
 		auto n_val = input_set[i][0];
 		std::string n_str = std::to_string(input_set[i][0]);
@@ -257,21 +330,30 @@ void z3_parse::new_build(exprst &influence,
 		if (n_val == 0) {
 			rhs = std::to_string(input_set[i][1]);
 		}
-		else if (n_val == 1) {
-			rhs = generate_arith(inst.rhs(),
-					from_expr(x),
-					std::to_string(input_set[i][1]));
-		}
-		else if (n_val == 2) {
-			rhs = generate_arith(inst.rhs(),
-					from_expr(x),
-					std::to_string(input_set[i][1]));
-			formula.append("(assert (= acc_" + std::to_string(i + 1) + " " + rhs
-					+ "))\n");
-			rhs = generate_arith(inst.rhs(),
-					from_expr(x),
-					"acc_" + std::to_string(i + 1));
-		}
+		else
+			rhs = add_symex(assign_insts, tgt_inst, loop_vars, i);
+//		else if (n_val == 1) {
+//			for (auto ins : assign_insts) {
+//				std::string s = generate_arith(inst.rhs(),
+//						from_expr(x),
+//						std::to_string(input_set[i][1]));
+//			}
+//			formula.append("(assert (= acc_" + std::to_string(i + 1) + " " + rhs
+//					+ "))\n");
+////			rhs = generate_arith(inst.rhs(),
+////					from_expr(x),
+////					std::to_string(input_set[i][1]));
+//		}
+//		else if (n_val == 2) {
+//			rhs = generate_arith(inst.rhs(),
+//					from_expr(x),
+//					std::to_string(input_set[i][1]));
+//			formula.append("(assert (= acc_" + std::to_string(i + 1) + " " + rhs
+//					+ "))\n");
+//			rhs = generate_arith(inst.rhs(),
+//					from_expr(x),
+//					"acc_" + std::to_string(i + 1));
+//		}
 		temp1 = "(= " + rhs + " " + temp1 + ")";
 		temp1 = "(assert " + temp1 + ")\n";
 		formula.append(temp1);

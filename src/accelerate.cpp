@@ -119,38 +119,6 @@ symbolt acceleratort::create_symbol(string name,
 	return symbol;
 }
 
-typet join_types(const typet &t1, const typet &t2) {
-	if (t1 == t2) {
-		return t1;
-	}
-	if ((t1.id() == ID_signedbv || t1.id() == ID_unsignedbv)
-			&& (t2.id() == ID_signedbv || t2.id() == ID_unsignedbv)) {
-
-		bitvector_typet b1 = to_bitvector_type(t1);
-		bitvector_typet b2 = to_bitvector_type(t2);
-
-		if (b1.id() == ID_unsignedbv && b2.id() == ID_unsignedbv) {
-			size_t width = max(b1.get_width(), b2.get_width());
-			return unsignedbv_typet(width);
-		}
-		else if (b1.id() == ID_signedbv && b2.id() == ID_signedbv) {
-			size_t width = max(b1.get_width(), b2.get_width());
-			return signedbv_typet(width);
-		}
-		else {
-			size_t signed_width =
-					t1.id() == ID_signedbv ? b1.get_width() : b2.get_width();
-			size_t unsigned_width =
-					t1.id() == ID_signedbv ? b2.get_width() : b1.get_width();
-
-			size_t width = max(signed_width, unsigned_width);
-
-			return signedbv_typet(width);
-		}
-	}
-	assert(false && "Unhandled join types");
-}
-
 bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	auto l_s = to_symbol_expr(inst_c.lhs());
 	auto r_e = inst_c.rhs();
@@ -193,7 +161,7 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 	return true;
 }
 
-void swap_all(exprt &l_c, exprt &n_e, exprt &j_e) {
+void acceleratort::swap_all(exprt &l_c, const exprt &n_e, const exprt &j_e) {
 	for (auto &op : l_c.operands()) {
 		if (op == n_e) {
 			op = j_e;
@@ -240,7 +208,6 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
 		exprt loop_cond,
 		goto_programt::targett sink) {
-	return false;
 	goto_programt g_p_c;
 	g_p_c.copy_from(g_p);
 	goto_programt::instructionst assign_insts_c = assign_insts;
@@ -288,37 +255,37 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	goto_programt::instructionst assign_insts_c = assign_insts;
 	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
 	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+	exprst loop_vars;
+	for (auto inst : assign_insts_c) {
+		gather_syms(inst.code.op0(), loop_vars);
+		gather_syms(inst.code.op1(), loop_vars);
+	}
 	for (auto it = assign_insts_c.begin(), it_e = assign_insts_c.end();
 			it != it_e; it++) {
 		g_p_c.update();
 		auto inst = *it;
 		auto &inst_code = to_code_assign(inst.code);
 		auto tgt = inst_code.lhs();
-		exprst src_syms, visited_syms;
-		get_all_sources(tgt, assign_insts_c, src_syms, visited_syms);
-		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-			continue;
-		}
-		goto_programt::instructionst relevant_insts;
-		for (auto it2 = assign_insts_c.begin(), it_e2 = assign_insts_c.end();
-				it2 != it_e2 && it2 != it; it2++) {
-			auto &inst_code = to_code_assign(it2->code);
-			if (find(src_syms.begin(), src_syms.end(), inst_code.lhs())
-					!= src_syms.end()) {
-				relevant_insts.push_back(*it2);
-			}
-		}
+//		goto_programt::instructionst relevant_insts;
+//		for (auto it2 = assign_insts_c.begin(), it_e2 = assign_insts_c.end();
+//				it2 != it_e2 && it2 != it; it2++) {
+//			auto &inst_code = to_code_assign(it2->code);
+//			relevant_insts.push_back(*it2);
+//		}
 		z3_parse parser { };
-		parser.new_build(src_syms, tgt, relevant_insts, inst_code);
+		parser.new_build(loop_vars, tgt, assign_insts_c, inst);
 		parser.z3_fire();
 		auto z3_model = parser.get_z3_model("z3_results.dat");
 		exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
-
 		std::cout << "Made acc expr: "
 				<< from_expr(accelerated_func)
 				<< std::endl;
+		inst_code.rhs() = accelerated_func;
+		auto x = g_p_c.instructions.begin();
+		advance(x, inst.location_number);
+		x->code = inst_code;
+		g_p_c.update();
 	}
-	return true;
 	g_p.copy_from(g_p_c);
 	g_p.update();
 	assign_insts = assign_insts_c;
@@ -333,10 +300,6 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	g_p.update();
 	return true;
 }
-
-//bool constraint_accelerator() {
-//
-//}
 
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
