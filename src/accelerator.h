@@ -13,7 +13,7 @@
 #define ACC_N "acc_n"
 #define ACC_J "acc_j"
 
-typedef std::unordered_set<exprt, irep_hash> exprst;
+typedef std::set<exprt> exprst;
 
 class loop_acc::acceleratort {
 	goto_modelt &goto_model;
@@ -30,8 +30,8 @@ class loop_acc::acceleratort {
 	void get_all_sources(exprt,
 			goto_programt::instructionst&,
 			exprst&,
-			goto_programt::instructionst&);
-	exprst gather_syms(exprt);
+			exprst&);
+	exprst gather_syms(exprt, exprst&);
 	void get_loops();
 	symbolt create_symbol(std::string, const typet&, bool force = false);
 	void precondition(goto_programt &g_p,
@@ -43,6 +43,10 @@ class loop_acc::acceleratort {
 			goto_programt &functions,
 			goto_programt &aux_path);
 	bool syntactic_matching(goto_programt &g_p,
+			goto_programt::instructionst &assign_insts,
+			exprt loop_cond,
+			goto_programt::targett sink);
+	bool constraint_solver(goto_programt &g_p,
 			goto_programt::instructionst &assign_insts,
 			exprt loop_cond,
 			goto_programt::targett sink);

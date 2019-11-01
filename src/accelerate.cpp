@@ -66,8 +66,7 @@ goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header
 	return dup_body;
 }
 
-exprst acceleratort::gather_syms(exprt expr) {
-	exprst expr_syms;
+exprst acceleratort::gather_syms(exprt expr, exprst &expr_syms) {
 	if (expr.id() == ID_symbol)
 		expr_syms.insert(expr);
 	else if (expr.id() == ID_index || expr.id() == ID_member
@@ -75,8 +74,7 @@ exprst acceleratort::gather_syms(exprt expr) {
 		assert(false && "Not Handled type");
 	else {
 		forall_operands(it, expr) {
-			for (auto a : gather_syms(*it))
-				expr_syms.insert(a);
+			gather_syms(*it, expr_syms);
 		}
 	}
 	return expr_syms;
@@ -85,25 +83,16 @@ exprst acceleratort::gather_syms(exprt expr) {
 void acceleratort::get_all_sources(exprt tgt,
 		goto_programt::instructionst &assign_insts,
 		exprst &src_syms,
-		goto_programt::instructionst &clustered_asgn_insts) {
-	src_syms = gather_syms(tgt);
-
-	for (goto_programt::instructionst::reverse_iterator r_it =
-			assign_insts.rbegin(); r_it != assign_insts.rend(); ++r_it) {
-		if (r_it->is_assign()) {
-			auto assignment = to_code_assign(r_it->code);
-			auto lhs_syms = gather_syms(assignment.lhs());
-
-			if (assignment.lhs().id() == ID_symbol) src_syms.insert(tgt);
-
-			for (auto s_it : lhs_syms) {
-				if (find(src_syms.begin(), src_syms.end(), s_it)
-						!= src_syms.end()) {
-					clustered_asgn_insts.push_front(*r_it);
-					src_syms.erase(assignment.lhs());
-					for (auto a : gather_syms(assignment.rhs()))
-						src_syms.insert(a);
-					break;
+		exprst &visited_syms) {
+//	src_syms = gather_syms(tgt);
+	for (auto it = assign_insts.begin(); it != assign_insts.end(); ++it) {
+		auto assignment = to_code_assign(it->code);
+		if (assignment.lhs() == tgt) {
+			gather_syms(assignment.rhs(), src_syms);
+			for (auto op : src_syms) {
+				if (visited_syms.find(op) == visited_syms.end()) {
+					visited_syms.insert(op);
+					get_all_sources(op, assign_insts, src_syms, visited_syms);
 				}
 			}
 		}
@@ -163,18 +152,14 @@ typet join_types(const typet &t1, const typet &t2) {
 }
 
 bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
-	auto l_e = to_symbol_expr(inst_c.lhs());
+	auto l_s = to_symbol_expr(inst_c.lhs());
 	auto r_e = inst_c.rhs();
-	if (can_cast_expr<symbol_exprt>(r_e)) {
-		auto r_s = to_symbol_expr(r_e);
-		return true;
-	}
-	else if (can_cast_expr<plus_exprt>(r_e)) {
+	if (can_cast_expr<plus_exprt>(r_e)) {
 		auto e0 = r_e.op0();
 		auto e1 = r_e.op1();
 		if (can_cast_expr<symbol_exprt>(e0)) {
 			auto r_s = to_symbol_expr(e0);
-			if (r_s.get_identifier() == l_e.get_identifier()) {
+			if (r_s.get_identifier() == l_s.get_identifier()) {
 				if (can_cast_expr<plus_exprt>(e1)) {
 
 				}
@@ -255,6 +240,7 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
 		exprt loop_cond,
 		goto_programt::targett sink) {
+	return false;
 	goto_programt g_p_c;
 	g_p_c.copy_from(g_p);
 	goto_programt::instructionst assign_insts_c = assign_insts;
@@ -264,9 +250,8 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		g_p_c.update();
 		auto &inst_code = to_code_assign(inst.code);
 		auto tgt = inst_code.lhs();
-		exprst src_syms;
-		goto_programt::instructionst clustered_asgn_insts;
-		get_all_sources(tgt, assign_insts_c, src_syms, clustered_asgn_insts);
+		exprst src_syms, visited_syms;
+		get_all_sources(tgt, assign_insts_c, src_syms, visited_syms);
 		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
 			continue;
 		}
@@ -284,10 +269,65 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 	assign_insts = assign_insts_c;
 	swap_all(loop_cond, n_exp, j_exp);
 	goto_programt::targett si = g_p.instructions.begin();
-	for (auto x = g_p.instructions.begin(), e = g_p.instructions.end(); e != x;
-			) {
-		x++;
-		if (x != e) si++;
+	for (auto it = g_p.instructions.begin(), it_e = g_p.instructions.end();
+			it_e != it;) {
+		it++;
+		if (it != it_e) si++;
+	}
+	precondition(g_p, g_p.instructions.begin(), si, loop_cond);
+	g_p.update();
+	return true;
+}
+
+bool acceleratort::constraint_solver(goto_programt &g_p,
+		goto_programt::instructionst &assign_insts,
+		exprt loop_cond,
+		goto_programt::targett sink) {
+	goto_programt g_p_c;
+	g_p_c.copy_from(g_p);
+	goto_programt::instructionst assign_insts_c = assign_insts;
+	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
+	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+	for (auto it = assign_insts_c.begin(), it_e = assign_insts_c.end();
+			it != it_e; it++) {
+		g_p_c.update();
+		auto inst = *it;
+		auto &inst_code = to_code_assign(inst.code);
+		auto tgt = inst_code.lhs();
+		exprst src_syms, visited_syms;
+		get_all_sources(tgt, assign_insts_c, src_syms, visited_syms);
+		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+			continue;
+		}
+		goto_programt::instructionst relevant_insts;
+		for (auto it2 = assign_insts_c.begin(), it_e2 = assign_insts_c.end();
+				it2 != it_e2 && it2 != it; it2++) {
+			auto &inst_code = to_code_assign(it2->code);
+			if (find(src_syms.begin(), src_syms.end(), inst_code.lhs())
+					!= src_syms.end()) {
+				relevant_insts.push_back(*it2);
+			}
+		}
+		z3_parse parser { };
+		parser.new_build(src_syms, tgt, relevant_insts, inst_code);
+		parser.z3_fire();
+		auto z3_model = parser.get_z3_model("z3_results.dat");
+		exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
+
+		std::cout << "Made acc expr: "
+				<< from_expr(accelerated_func)
+				<< std::endl;
+	}
+	return true;
+	g_p.copy_from(g_p_c);
+	g_p.update();
+	assign_insts = assign_insts_c;
+	swap_all(loop_cond, n_exp, j_exp);
+	goto_programt::targett si = g_p.instructions.begin();
+	for (auto it = g_p.instructions.begin(), it_e = g_p.instructions.end();
+			it_e != it;) {
+		it++;
+		if (it != it_e) si++;
 	}
 	precondition(g_p, g_p.instructions.begin(), si, loop_cond);
 	g_p.update();
@@ -331,12 +371,14 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		augment_path(loop_header, functions, dup_body);
 		return;
 	}
+	else if (constraint_solver(dup_body, assign_insts, loop_cond, sink)) {
+
+	}
 	else {
 		for (auto tgt : assign_tgts) {
 			symbol_exprt se = to_symbol_expr(tgt);
-			exprst src_syms;
-			goto_programt::instructionst clustered_asgn_insts;
-			get_all_sources(tgt, assign_insts, src_syms, clustered_asgn_insts);
+			exprst src_syms, visited_syms;
+			get_all_sources(tgt, assign_insts, src_syms, visited_syms);
 			cout << "src_syms : " << endl;
 			if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
 				continue;
