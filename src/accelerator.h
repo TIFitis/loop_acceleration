@@ -31,9 +31,7 @@ class loop_acc::acceleratort {
 			goto_programt::instructionst&,
 			exprst&,
 			exprst&);
-	exprst gather_syms(exprt, exprst&);
 	void get_loops();
-	symbolt create_symbol(std::string, const typet&, bool force = false);
 	void precondition(goto_programt &g_p,
 			goto_programt::targett loc,
 			goto_programt::targett sink,
@@ -51,6 +49,9 @@ class loop_acc::acceleratort {
 			exprt loop_cond,
 			goto_programt::targett sink);
 public:
+	static symbolt create_symbol(std::string, const typet&, bool force = false);
+	static exprst gather_syms(exprt, exprst&);
+	static void swap_all(exprt &l_c, const exprt &n_e, const exprt &j_e);
 	acceleratort(goto_modelt &goto_model) :
 			goto_model(goto_model) {
 	}

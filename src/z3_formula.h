@@ -19,6 +19,10 @@ private:
 	void build_input_set(unsigned k);
 	void add_alpha_decl(unsigned k);
 	void add_assert(unsigned k);
+	std::string add_symex(const goto_programt::instructionst &assign_insts,
+			const goto_programt::instructiont &inst,
+			const exprst &loop_vars,
+			unsigned eqn);
 
 	std::set<exprt> influ_set;
 
@@ -51,7 +55,7 @@ public:
 	void new_build(exprst &influence,
 			exprt x,
 			const goto_programt::instructionst &assign_insts,
-			code_assignt &inst);
+			goto_programt::instructiont &inst);
 
 	std::string buildFormula(std::set<exprt> &influence,
 			const std::string &my_name,
