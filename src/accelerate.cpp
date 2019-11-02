@@ -212,7 +212,9 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
 		exprt loop_cond,
 		goto_programt::targett sink) {
+#ifdef NO_SYNTACTIC
 	return false;
+#endif
 	goto_programt g_p_c;
 	g_p_c.copy_from(g_p);
 	goto_programt::instructionst assign_insts_c = assign_insts;
