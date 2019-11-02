@@ -212,6 +212,7 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
 		exprt loop_cond,
 		goto_programt::targett sink) {
+	return false;
 	goto_programt g_p_c;
 	g_p_c.copy_from(g_p);
 	goto_programt::instructionst assign_insts_c = assign_insts;
@@ -361,7 +362,7 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	goto_safe->make_goto(safe, true_exprt());
 
 	if (syntactic_matching(dup_body, assign_insts, loop_cond, sink)) {
-		cout << "SyntactingMatching accelerated :: " << endl;
+		cout << "SyntacticMatching accelerated :: " << endl;
 		augment_path(loop_header, functions, dup_body);
 		return;
 	}
