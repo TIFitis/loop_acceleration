@@ -128,15 +128,15 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 		if (can_cast_expr<symbol_exprt>(e0)) {
 			auto r_s = to_symbol_expr(e0);
 			if (r_s.get_identifier() == l_s.get_identifier()) {
-				if (can_cast_expr<plus_exprt>(e1)) {
-
-				}
-				else {
+				if (can_cast_expr<constant_exprt>(e1)
+						|| can_cast_expr<symbol_exprt>(e1)) {
 					auto mod_expr = plus_exprt(e0, mult_exprt(e1, n_e));
 					inst_c.rhs() = mod_expr;
 					inst_c = code_assignt(inst_c.lhs(), mod_expr);
 					return true;
 				}
+				else
+					return false;
 			}
 			else
 				return false;
@@ -163,10 +163,10 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 
 void acceleratort::swap_all(exprt &l_c, const exprt &n_e, const exprt &j_e) {
 	for (auto &op : l_c.operands()) {
+		swap_all(op, n_e, j_e);
 		if (op == n_e) {
 			op = j_e;
 		}
-		swap_all(op, n_e, j_e);
 	}
 }
 
@@ -176,6 +176,7 @@ void acceleratort::precondition(goto_programt &g_p,
 		exprt loop_cond) {
 	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
 	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+	auto p_exp = goto_model.symbol_table.lookup(ACC_P)->symbol_expr();
 	auto n_asgn = g_p.insert_before(loc);
 	n_asgn->make_assignment();
 	n_asgn->code = code_assignt(n_exp,
@@ -184,24 +185,27 @@ void acceleratort::precondition(goto_programt &g_p,
 	n_ge_1->make_assumption(binary_relation_exprt(n_exp,
 			ID_ge,
 			from_integer(1, n_exp.type())));
-	auto j_asgn = g_p.insert_after(n_ge_1);
-	j_asgn->make_assignment();
-	j_asgn->code = code_assignt(j_exp,
-			side_effect_expr_nondett(j_exp.type(), j_asgn->source_location));
-	auto j_ge_0 = g_p.insert_after(j_asgn);
-	j_ge_0->make_assumption(binary_relation_exprt(j_exp,
-			ID_ge,
-			from_integer(0, j_exp.type())));
-	auto j_lt_n = g_p.insert_after(j_ge_0);
-	j_lt_n->make_assumption(binary_relation_exprt(j_exp, ID_lt, n_exp));
-	auto forall_assump = g_p.insert_after(j_lt_n);
-	forall_assump->make_goto(sink,
-			forall_exprt(j_exp,
-					and_exprt(and_exprt(binary_relation_exprt(j_exp,
-							ID_ge,
-							from_integer(0, j_exp.type())),
-							binary_relation_exprt(j_exp, ID_le, n_exp)),
-							loop_cond)));
+//	auto j_asgn = g_p.insert_after(n_ge_1);
+//	j_asgn->make_assignment();
+//	j_asgn->code = code_assignt(j_exp,
+//			side_effect_expr_nondett(j_exp.type(), j_asgn->source_location));
+//	auto j_ge_0 = g_p.insert_after(j_asgn);
+//	j_ge_0->make_assumption(binary_relation_exprt(j_exp,
+//			ID_ge,
+//			from_integer(0, j_exp.type())));
+//	auto j_lt_n = g_p.insert_after(j_ge_0);
+//	j_lt_n->make_assumption(binary_relation_exprt(j_exp, ID_lt, n_exp));
+//	auto forall_assump = g_p.insert_after(j_lt_n);
+//	forall_assump->make_assignment();
+//	forall_assump->code = code_assignt(p_exp,
+//			forall_exprt(j_exp,
+//					and_exprt(and_exprt(binary_relation_exprt(j_exp,
+//							ID_ge,
+//							from_integer(0, j_exp.type())),
+//							binary_relation_exprt(j_exp, ID_le, n_exp)),
+//							loop_cond)));
+	auto forall_assump2 = g_p.insert_after(n_ge_1);
+	forall_assump2->make_assumption(loop_cond);
 }
 
 bool acceleratort::syntactic_matching(goto_programt &g_p,
@@ -234,7 +238,9 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 	g_p.copy_from(g_p_c);
 	g_p.update();
 	assign_insts = assign_insts_c;
-	swap_all(loop_cond, n_exp, j_exp);
+	swap_all(loop_cond,
+			n_exp,
+			minus_exprt(n_exp, from_integer(1, n_exp.type())));
 	goto_programt::targett si = g_p.instructions.begin();
 	for (auto it = g_p.instructions.begin(), it_e = g_p.instructions.end();
 			it_e != it;) {
@@ -253,8 +259,8 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	goto_programt g_p_c;
 	g_p_c.copy_from(g_p);
 	goto_programt::instructionst assign_insts_c = assign_insts;
-	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
-	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+	exprt n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
+	exprt j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
 	exprst loop_vars;
 	for (auto inst : assign_insts_c) {
 		gather_syms(inst.code.op0(), loop_vars);
@@ -266,6 +272,12 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		auto inst = *it;
 		auto &inst_code = to_code_assign(inst.code);
 		auto tgt = inst_code.lhs();
+		exprst src_syms, visited_syms;
+		get_all_sources(tgt, assign_insts_c, src_syms, visited_syms);
+		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+			cout << "Skipping : " << from_expr(inst.code) << endl;
+			continue;
+		}
 //		goto_programt::instructionst relevant_insts;
 //		for (auto it2 = assign_insts_c.begin(), it_e2 = assign_insts_c.end();
 //				it2 != it_e2 && it2 != it; it2++) {
@@ -276,11 +288,18 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		parser.new_build(loop_vars, tgt, assign_insts_c, inst);
 		parser.z3_fire();
 		auto z3_model = parser.get_z3_model("z3_results.dat");
-		exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
-		std::cout << "Made acc expr: "
-				<< from_expr(accelerated_func)
-				<< std::endl;
+		if (z3_model.empty()) {
+			cout << "Acceleration failed for : "
+					<< from_expr(inst.code)
+					<< endl;
+			return false;
+		}
+		exprt accelerated_func = parser.getAccFunc(z3_model, loop_vars, n_exp);
+		cout << "\n\nClosedForm expr:\n" << from_expr(accelerated_func) << endl;
+		simplify(accelerated_func, namespacet(goto_model.symbol_table));
+		cout << "\n\nSimplified expr:\n" << from_expr(accelerated_func) << endl;
 		inst_code.rhs() = accelerated_func;
+		swap_all(loop_cond, tgt, inst_code.rhs());
 		auto x = g_p_c.instructions.begin();
 		advance(x, inst.location_number);
 		x->code = inst_code;
@@ -289,7 +308,9 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	g_p.copy_from(g_p_c);
 	g_p.update();
 	assign_insts = assign_insts_c;
-	swap_all(loop_cond, n_exp, j_exp);
+	swap_all(loop_cond,
+			n_exp,
+			minus_exprt(n_exp, from_integer(1, n_exp.type())));
 	goto_programt::targett si = g_p.instructions.begin();
 	for (auto it = g_p.instructions.begin(), it_e = g_p.instructions.end();
 			it_e != it;) {
@@ -309,7 +330,10 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	auto dup_body_iter = dup_body.instructions.begin();
 	exprt loop_cond;
 	if (loop_header->is_goto()) {
-		loop_cond = not_exprt(loop_header->guard);
+		if (can_cast_expr<not_exprt>(loop_header->guard))
+			loop_cond = to_not_expr(loop_header->guard).op0();
+		else
+			loop_cond = not_exprt(loop_header->guard);
 	}
 	goto_programt::instructionst assign_insts;
 	exprst assign_tgts;
@@ -328,54 +352,66 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	auto j_sym = create_symbol(ACC_J, signedbv_typet(32), true);
 	goto_model.symbol_table.insert(j_sym);
 	auto j_exp = j_sym.symbol_expr();
+	auto p_sym = create_symbol(ACC_P, bool_typet(), true);
+	goto_model.symbol_table.insert(p_sym);
+
+	auto safe = dup_body.insert_after(sink);
+	safe->make_skip();
+	auto goto_safe = dup_body.insert_before(sink);
+	goto_safe->make_goto(safe, true_exprt());
 
 	if (syntactic_matching(dup_body, assign_insts, loop_cond, sink)) {
-		cout << "Syntacting Matching accelerated :: " << endl;
+		cout << "SyntactingMatching accelerated :: " << endl;
 		augment_path(loop_header, functions, dup_body);
 		return;
 	}
 	else if (constraint_solver(dup_body, assign_insts, loop_cond, sink)) {
-
+		cout << "ConstraintSolving accelerated :: " << endl;
+		augment_path(loop_header, functions, dup_body);
+		return;
 	}
 	else {
-		for (auto tgt : assign_tgts) {
-			symbol_exprt se = to_symbol_expr(tgt);
-			exprst src_syms, visited_syms;
-			get_all_sources(tgt, assign_insts, src_syms, visited_syms);
-			cout << "src_syms : " << endl;
-			if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-				continue;
-			}
-			else {
-				//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
-				// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
-				// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
-				// Todo: Also add each instruction constraint to the z3_parser!
-				std::set<exprt> inf;
-				for (auto a : src_syms)
-					inf.insert(a);
-				z3_parse parser { };
-				goto_programt::instructionst tgt_asgn_insts;
-				for (auto &inst : assign_insts) {
-					auto &inst_code = to_code_assign(inst.code);
-					if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
-				}
-				auto z3_formula = parser.buildFormula(inf,
-						from_expr(tgt),
-						tgt_asgn_insts);
-				cout << z3_formula << endl;
-				parser.z3_fire(z3_formula);
-				auto z3_model = parser.get_z3_model("z3_results.dat");
-
-				exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
-
-				std::cout << "Made acc expr: "
-						<< from_expr(accelerated_func)
-						<< std::endl;
-			}
-
-		}
+		return;
 	}
+//	else {
+//		for (auto tgt : assign_tgts) {
+//			symbol_exprt se = to_symbol_expr(tgt);
+//			exprst src_syms, visited_syms;
+//			get_all_sources(tgt, assign_insts, src_syms, visited_syms);
+//			cout << "src_syms : " << endl;
+//			if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
+//				continue;
+//			}
+//			else {
+//				//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
+//				// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
+//				// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
+//				// Todo: Also add each instruction constraint to the z3_parser!
+//				std::set<exprt> inf;
+//				for (auto a : src_syms)
+//					inf.insert(a);
+//				z3_parse parser { };
+//				goto_programt::instructionst tgt_asgn_insts;
+//				for (auto &inst : assign_insts) {
+//					auto &inst_code = to_code_assign(inst.code);
+//					if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
+//				}
+//				auto z3_formula = parser.buildFormula(inf,
+//						from_expr(tgt),
+//						tgt_asgn_insts);
+//				cout << z3_formula << endl;
+//				parser.z3_fire(z3_formula);
+//				auto z3_model = parser.get_z3_model("z3_results.dat");
+//				if (z3_model.empty()) return false;
+////				exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
+//
+////				std::cout << "Made acc expr: "
+////						<< from_expr(accelerated_func)
+////						<< std::endl;
+//			}
+//
+//		}
+//	}
 }
 
 void acceleratort::accelerate_all_loops(goto_programt &goto_function) {
