@@ -12,6 +12,7 @@
 
 #define ACC_N "acc_n"
 #define ACC_J "acc_j"
+#define ACC_P "acc_p"
 
 typedef std::set<exprt> exprst;
 
