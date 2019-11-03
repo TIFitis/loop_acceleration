@@ -166,7 +166,7 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
                     else max = string2integer(std::to_string(INT_MAX));
                     bl->make_assumption(binary_relation_exprt(rh,
                                                               ID_le,
-                                                              from_integer(INT_MAX, rh.type())));
+                                                              from_integer(max, rh.type())));
                     rh = rh_.op1();
 
                 }
