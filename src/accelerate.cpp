@@ -151,21 +151,24 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 		goto_programt &aux_path) {
 
     // **** Handling Overflow **** //
-    // todo: Assuming types to be int : So using INT_MAX
-    // Shoudl change that!
     for(auto start = aux_path.instructions.begin(), end = aux_path.instructions.end(); start!=end; start++){
         if(start->is_assign()){
             auto x = to_code_assign(start->code);
             auto rh = x.rhs();
             //std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
             while(true){
-                if(can_cast_expr<binary_exprt>(rh)){
+                if(can_cast_expr<binary_exprt>(rh) && can_cast_type<bitvector_typet>(rh.type())){
                     auto rh_ = to_binary_expr(rh);
                     auto bl = aux_path.insert_after(start);
+                    mp_integer max;
+                    if(can_cast_type<unsignedbv_typet>(rh.type())) max = to_unsignedbv_type(rh.type()).largest();
+                    else if(can_cast_type<signedbv_typet>(rh.type())) max = to_signedbv_type(rh.type()).largest();
+                    else max = string2integer(std::to_string(INT_MAX));
                     bl->make_assumption(binary_relation_exprt(rh,
                                                               ID_le,
                                                               from_integer(INT_MAX, rh.type())));
                     rh = rh_.op1();
+
                 }
                 else {
                     //std::cout<<from_expr(rh)<<" ;; >> Neither: "<<rh.id()<<std::endl;
