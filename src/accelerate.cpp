@@ -7,6 +7,7 @@
 
 #include "loop_acceleration.h"
 #include "accelerator.h"
+#include "../cbmc/src/util/std_expr.h"
 
 using namespace std;
 using namespace loop_acc;
@@ -148,6 +149,33 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 bool acceleratort::augment_path(goto_programt::targett &loop_header,
 		goto_programt &functions,
 		goto_programt &aux_path) {
+
+    // **** Handling Overflow **** //
+    // todo: Assuming types to be int : So using INT_MAX
+    // Shoudl change that!
+    for(auto start = aux_path.instructions.begin(), end = aux_path.instructions.end(); start!=end; start++){
+        if(start->is_assign()){
+            auto x = to_code_assign(start->code);
+            auto rh = x.rhs();
+            //std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
+            while(true){
+                if(can_cast_expr<binary_exprt>(rh)){
+                    auto rh_ = to_binary_expr(rh);
+                    auto bl = aux_path.insert_after(start);
+                    bl->make_assumption(binary_relation_exprt(rh,
+                                                              ID_le,
+                                                              from_integer(INT_MAX, rh.type())));
+                    rh = rh_.op1();
+                }
+                else {
+                    //std::cout<<from_expr(rh)<<" ;; >> Neither: "<<rh.id()<<std::endl;
+                    break;
+                }
+            }
+        } // for loop
+    }
+    // **** Handling Overflow Done **** //
+
 	cout << "========auxpath==========" << endl;
 	aux_path.output(cout);
 	cout << "========auxpath==========" << endl;
@@ -361,6 +389,7 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	goto_safe->make_goto(safe, true_exprt());
 
 	if (syntactic_matching(dup_body, assign_insts, loop_cond, sink)) {
+	    // syntactic_matching(dup_body, assign_insts, loop_cond, sink)
 		cout << "SyntactingMatching accelerated :: " << endl;
 		augment_path(loop_header, functions, dup_body);
 		return;
@@ -402,7 +431,7 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 //				cout << z3_formula << endl;
 //				parser.z3_fire(z3_formula);
 //				auto z3_model = parser.get_z3_model("z3_results.dat");
-//				if (z3_model.empty()) return false;
+//				if (z3_model.empty()) return ;
 ////				exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
 //
 ////				std::cout << "Made acc expr: "
