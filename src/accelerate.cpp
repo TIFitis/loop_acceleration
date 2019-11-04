@@ -7,7 +7,6 @@
 
 #include "loop_acceleration.h"
 #include "accelerator.h"
-#include "../cbmc/src/util/std_expr.h"
 
 using namespace std;
 using namespace loop_acc;
@@ -85,7 +84,6 @@ void acceleratort::get_all_sources(exprt tgt,
 		goto_programt::instructionst &assign_insts,
 		exprst &src_syms,
 		exprst &visited_syms) {
-//	src_syms = gather_syms(tgt);
 	for (auto it = assign_insts.begin(); it != assign_insts.end(); ++it) {
 		auto assignment = to_code_assign(it->code);
 		if (assignment.lhs() == tgt) {
@@ -146,13 +144,9 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	return false;
 }
 
-bool acceleratort::augment_path(goto_programt::targett &loop_header,
-		goto_programt &functions,
-		goto_programt &aux_path) {
-
-	// **** Handling Overflow **** //
-	for (auto start = aux_path.instructions.begin(), end =
-			aux_path.instructions.end(); start != end; start++) {
+void acceleratort::add_overflow_checks(goto_programt &g_p) {
+	for (auto start = g_p.instructions.begin(), end = g_p.instructions.end();
+			start != end; start++) {
 		if (start->is_assign()) {
 			auto x = to_code_assign(start->code);
 			auto rh = x.rhs();
@@ -161,7 +155,7 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 				if (can_cast_expr<binary_exprt>(rh)
 						&& can_cast_type<bitvector_typet>(rh.type())) {
 					auto rh_ = to_binary_expr(rh);
-					auto bl = aux_path.insert_after(start);
+					auto bl = g_p.insert_after(start);
 					mp_integer max;
 					if (can_cast_type<unsignedbv_typet>(rh.type()))
 						max = to_unsignedbv_type(rh.type()).largest();
@@ -182,8 +176,12 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 			}
 		} // for loop
 	}
-	// **** Handling Overflow Done **** //
+}
 
+bool acceleratort::augment_path(goto_programt::targett &loop_header,
+		goto_programt &functions,
+		goto_programt &aux_path) {
+	add_overflow_checks(aux_path);
 	cout << "========auxpath==========" << endl;
 	aux_path.output(cout);
 	cout << "========auxpath==========" << endl;
@@ -412,45 +410,6 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	else {
 		return;
 	}
-//	else {
-//		for (auto tgt : assign_tgts) {
-//			symbol_exprt se = to_symbol_expr(tgt);
-//			exprst src_syms, visited_syms;
-//			get_all_sources(tgt, assign_insts, src_syms, visited_syms);
-//			cout << "src_syms : " << endl;
-//			if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-//				continue;
-//			}
-//			else {
-//				//fit_polynomial_sliced(clustered_asgn_insts, tgt, src_syms);
-//				// NOTE! Here we expect src_syms for JUST the current variable we are dealing with.
-//				// TODO: Need to make a set of sets/map for src_sym of each variable, and pass it here.
-//				// Todo: Also add each instruction constraint to the z3_parser!
-//				std::set<exprt> inf;
-//				for (auto a : src_syms)
-//					inf.insert(a);
-//				z3_parse parser { };
-//				goto_programt::instructionst tgt_asgn_insts;
-//				for (auto &inst : assign_insts) {
-//					auto &inst_code = to_code_assign(inst.code);
-//					if (inst_code.lhs() == tgt) tgt_asgn_insts.push_back(inst);
-//				}
-//				auto z3_formula = parser.buildFormula(inf,
-//						from_expr(tgt),
-//						tgt_asgn_insts);
-//				cout << z3_formula << endl;
-//				parser.z3_fire(z3_formula);
-//				auto z3_model = parser.get_z3_model("z3_results.dat");
-//				if (z3_model.empty()) return ;
-////				exprt accelerated_func = parser.getAccFunc(n_exp, z3_model);
-//
-////				std::cout << "Made acc expr: "
-////						<< from_expr(accelerated_func)
-////						<< std::endl;
-//			}
-//
-//		}
-//	}
 }
 
 void acceleratort::accelerate_all_loops(goto_programt &goto_function) {

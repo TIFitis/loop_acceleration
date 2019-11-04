@@ -39,6 +39,7 @@
 #include <util/replace_expr.h>
 #include <util/simplify_expr.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 
 #ifndef LOOP_ACCELERATION_H_
 #define LOOP_ACCELERATION_H_
