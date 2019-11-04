@@ -13,6 +13,8 @@
 #include <map>
 #include <algorithm>
 
+#include <climits>
+
 #include <analyses/natural_loops.h>
 #include <ansi-c/ansi_c_language.h>
 #include <cpp/cpp_language.h>
