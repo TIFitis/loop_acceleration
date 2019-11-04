@@ -38,6 +38,7 @@ class loop_acc::acceleratort {
 			goto_programt::targett sink,
 			exprt loop_cond);
 	bool check_pattern(code_assignt &, exprt);
+	void add_overflow_checks(goto_programt &g_p);
 	bool augment_path(goto_programt::targett &loop_header,
 			goto_programt &functions,
 			goto_programt &aux_path);
