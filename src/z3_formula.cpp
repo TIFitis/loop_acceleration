@@ -229,6 +229,10 @@ std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts
 		for (auto a : assign_insts_o)
 			assign_insts.push_back(a);
 	}
+	std::map<exprt, exprt> latest_sym;
+	for (auto inst : assign_insts) {
+		latest_sym[inst.code.op0()] = inst.code.op0();
+	}
 //	std::cout << "before ssa ====================\n\n";
 //	for (auto a : assign_insts)
 //		std::cout << from_expr(a.code) << std::endl;
@@ -271,9 +275,12 @@ std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts
 		it++;
 		for (auto it2 = it, it_e2 = assign_insts.end(); it2 != it_e2; it2++) {
 			auto temp = it2->code.op1();
-			loop_acc::acceleratort::swap_all(temp, ins_c.lhs(), new_copy);
+			loop_acc::acceleratort::swap_all(temp,
+					latest_sym[ins_c.lhs()],
+					new_copy);
 			it2->code.op1().swap(temp);
 		}
+		latest_sym[ins_c.lhs()] = new_copy;
 	}
 //	for (auto a : assign_insts)
 //		std::cout << from_expr(a.code) << std::endl;
