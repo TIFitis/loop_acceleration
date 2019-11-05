@@ -25,9 +25,9 @@ class loop_acc::acceleratort {
 	void accelerate_loop(goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
 			goto_programt&);
-	goto_programt& create_dup_loop(goto_programt::targett&,
+	std::set<goto_programt*>& create_dup_loop(goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
-			goto_programt&, goto_programt::targett &);
+			goto_programt&);
 	void get_all_sources(exprt,
 			goto_programt::instructionst&,
 			exprst&,
@@ -50,6 +50,10 @@ class loop_acc::acceleratort {
 			goto_programt::instructionst &assign_insts,
 			exprt loop_cond,
 			goto_programt::targett sink);
+	void generate_paths(goto_programt &dup_body,
+			goto_programt::targetst &branches,
+			goto_programt::targetst::iterator cur_branch,
+			std::map<goto_programt::targett, unsigned> path_explored, std::set<goto_programt*>& paths);
 public:
 	static symbolt create_symbol(std::string, const typet&, bool force = false);
 	static exprst gather_syms(exprt, exprst&);

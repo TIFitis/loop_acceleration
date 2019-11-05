@@ -19,10 +19,63 @@ void acceleratort::get_loops() {
 	}
 }
 
-goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header,
+void acceleratort::generate_paths(goto_programt &dup_body,
+		goto_programt::targetst &branches,
+		goto_programt::targetst::iterator cur_branch,
+		map<goto_programt::targett, unsigned> path_explored,
+		set<goto_programt*> &paths) {
+	if (cur_branch == branches.end()) {
+		goto_programt &path = *(new goto_programt());
+		path.copy_from(dup_body);
+		goto_programt::targett path_it = path.instructions.begin();
+		for (auto tgt_it = dup_body.instructions.begin(), tgt_end =
+				dup_body.instructions.end(); tgt_it != tgt_end;
+				tgt_it++, path_it++) {
+			if (tgt_it->is_goto()) {
+				if (tgt_it->guard == true_exprt()) {
+					for (auto it_new = path_it, new_tgt_end =
+							path_it->get_target(); it_new != new_tgt_end;
+							it_new++, path_it++, tgt_it++) {
+						it_new->make_skip();
+					}
+					path_it--;
+					tgt_it--;
+					continue;
+				}
+				if (find(branches.begin(), branches.end(), tgt_it)
+						== branches.end()) continue;
+				if (path_explored[tgt_it] == 1) {
+					for (auto it_new = path_it, new_it_end =
+							path_it->get_target(); it_new != new_it_end;
+							it_new++, tgt_it++, path_it++) {
+						it_new->make_skip();
+					}
+					path_it--;
+					tgt_it--;
+					continue;
+				}
+				else if (path_explored[tgt_it] == 2) {
+					path_it->make_skip();
+					continue;
+				}
+			}
+		}
+		remove_skip(path);
+		paths.insert(&path);
+		return;
+	}
+	path_explored[*cur_branch] = 1;
+	cur_branch++;
+	generate_paths(dup_body, branches, cur_branch, path_explored, paths);
+	cur_branch--;
+	path_explored[*cur_branch] = 2;
+	cur_branch++;
+	generate_paths(dup_body, branches, cur_branch, path_explored, paths);
+}
+
+set<goto_programt*>& acceleratort::create_dup_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
-		goto_programt &functions,
-		goto_programt::targett &loop_sink) {
+		goto_programt &functions) {
 	goto_programt &dup_body = *(new goto_programt());
 	dup_body.copy_from(functions);
 //	Forall_goto_program_instructions(it, dup_body)
@@ -32,38 +85,60 @@ goto_programt& acceleratort::create_dup_loop(goto_programt::targett &loop_header
 
 	goto_programt::targett sink = dup_body.add_instruction(ASSUME);
 	sink->guard = false_exprt();
-	loop_sink = sink;
 //	goto_programt::targett end = dup_body.add_instruction(SKIP);
 //	auto end = (*loop.rbegin())->get_target();
-	goto_programt::targett start = dup_body.instructions.begin();
+	goto_programt::targett dup_body_it = dup_body.instructions.begin();
+	goto_programt::targetst branches;
 	for (auto tgt_it = functions.instructions.begin(), tgt_end =
 			functions.instructions.end(); tgt_it != tgt_end;
-			tgt_it++, start++) {
+			tgt_it++, dup_body_it++) {
 		if (loop.find(tgt_it) == loop.end()) {
-			start->make_skip();
+			dup_body_it->make_skip();
 		}
 		else if (tgt_it->is_goto()) {
 			for (auto &t : tgt_it->targets) {
 				if (t->location_number > tgt_it->location_number) {
 					if (loop.find(t) == loop.end()) {
-						start->targets.clear();
-						start->targets.push_back(sink);
+						dup_body_it->targets.clear();
+						dup_body_it->targets.push_back(sink);
+					}
+					else {
+						if (tgt_it->guard != true_exprt())
+							branches.push_back(dup_body_it);
 					}
 				}
 				else if (t == loop_header) {
-					start->make_skip();
+					dup_body_it->make_skip();
 //					start->targets.clear();
 //					start->targets.push_back(end);
 				}
 				else {
-					start->targets.clear();
-					start->targets.push_back(sink);
+					dup_body_it->targets.clear();
+					dup_body_it->targets.push_back(sink);
 				}
 			}
 		}
 	}
 	remove_skip(dup_body);
-	return dup_body;
+	cout << "========dup_body==========" << endl;
+	dup_body.output(cout);
+	cout << "========dup_body==========" << endl;
+	cout << "========branches==========" << endl;
+	map<goto_programt::targett, unsigned> path_explored;
+	for (auto s : branches) {
+		path_explored[s] = 0;
+		cout << from_expr(s->guard) << endl;
+	}
+	cout << "========branches==========" << endl;
+	set<goto_programt*> &paths = *new set<goto_programt*>();
+	generate_paths(dup_body, branches, branches.begin(), path_explored, paths);
+	cout << paths.size() << " paths generated!" << endl;
+	for (auto a : paths) {
+		cout << "========path-begin==========" << endl;
+		a->output(cout);
+		cout << "========path-end==========" << endl;
+	}
+	return paths;
 }
 
 exprst acceleratort::gather_syms(exprt expr, exprst &expr_syms) {
@@ -192,6 +267,7 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 	functions.update();
 	functions.destructive_insert(loop_header, aux_path);
 	functions.update();
+	loop_header = split;
 	return true;
 }
 
@@ -208,17 +284,6 @@ void acceleratort::precondition(goto_programt &g_p,
 		goto_programt::targett loc,
 		goto_programt::targett sink,
 		exprt loop_cond) {
-	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
-	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
-	auto p_exp = goto_model.symbol_table.lookup(ACC_P)->symbol_expr();
-	auto n_asgn = g_p.insert_before(loc);
-	n_asgn->make_assignment();
-	n_asgn->code = code_assignt(n_exp,
-			side_effect_expr_nondett(n_exp.type(), n_asgn->source_location));
-	auto n_ge_1 = g_p.insert_after(n_asgn);
-	n_ge_1->make_assumption(binary_relation_exprt(n_exp,
-			ID_ge,
-			from_integer(1, n_exp.type())));
 //	auto j_asgn = g_p.insert_after(n_ge_1);
 //	j_asgn->make_assignment();
 //	j_asgn->code = code_assignt(j_exp,
@@ -238,7 +303,7 @@ void acceleratort::precondition(goto_programt &g_p,
 //							from_integer(0, j_exp.type())),
 //							binary_relation_exprt(j_exp, ID_le, n_exp)),
 //							loop_cond)));
-	auto forall_assump2 = g_p.insert_after(n_ge_1);
+	auto forall_assump2 = g_p.insert_after(loc);
 	forall_assump2->make_assumption(loop_cond);
 }
 
@@ -362,27 +427,15 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
-	goto_programt::targett sink;
-	auto &dup_body = create_dup_loop(loop_header, loop, functions, sink);
-	auto dup_body_iter = dup_body.instructions.begin();
-	exprt loop_cond;
+	auto &paths = create_dup_loop(loop_header, loop, functions);
+	exprt loop_cond_o;
 	if (loop_header->is_goto()) {
 		if (can_cast_expr<not_exprt>(loop_header->guard))
-			loop_cond = to_not_expr(loop_header->guard).op0();
+			loop_cond_o = to_not_expr(loop_header->guard).op0();
 		else
-			loop_cond = not_exprt(loop_header->guard);
+			loop_cond_o = not_exprt(loop_header->guard);
 	}
-	goto_programt::instructionst assign_insts;
-	exprst assign_tgts;
-	for (auto inst_it = dup_body.instructions.begin(), inst_end =
-			dup_body.instructions.end(); inst_it != inst_end;
-			inst_it++, dup_body_iter++) {
-		if (inst_it->is_assign()) {
-			assign_insts.push_back(*inst_it);
-			auto &x = to_code_assign(inst_it->code);
-			assign_tgts.insert(x.lhs());
-		}
-	}
+
 	auto n_sym = create_symbol(ACC_N, signedbv_typet(32), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();
@@ -392,24 +445,47 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	auto p_sym = create_symbol(ACC_P, bool_typet(), true);
 	goto_model.symbol_table.insert(p_sym);
 
-	auto safe = dup_body.insert_after(sink);
-	safe->make_skip();
-	auto goto_safe = dup_body.insert_before(sink);
-	goto_safe->make_goto(safe, true_exprt());
+	for (auto path_ptr : paths) {
+		exprt loop_cond = loop_cond_o;
+		auto &path = *path_ptr;
+		auto sink = path.instructions.end();
+		sink--;
+		assert(sink->is_assume() && sink->guard == false_exprt()
+				&& "Sink not found !!!");
+		auto dup_body_iter = path.instructions.begin();
+		goto_programt::instructionst assign_insts;
+		exprst assign_tgts;
+		for (auto inst_it = path.instructions.begin(), inst_end =
+				path.instructions.end(); inst_it != inst_end;
+				inst_it++, dup_body_iter++) {
+			if (inst_it->is_assign()) {
+				assign_insts.push_back(*inst_it);
+				auto &x = to_code_assign(inst_it->code);
+				assign_tgts.insert(x.lhs());
+			}
+		}
+		auto safe = path.insert_after(sink);
+		safe->make_skip();
+		auto goto_safe = path.insert_before(sink);
+		goto_safe->make_goto(safe, true_exprt());
 
-	if (syntactic_matching(dup_body, assign_insts, loop_cond, sink)) {
-		cout << "SyntactingMatching accelerated :: " << endl;
-		augment_path(loop_header, functions, dup_body);
-		return;
+		if (syntactic_matching(path, assign_insts, loop_cond, sink)) {
+			cout << "SyntactingMatching accelerated :: " << endl;
+			augment_path(loop_header, functions, path);
+		}
+		else if (constraint_solver(path, assign_insts, loop_cond, sink)) {
+			cout << "ConstraintSolving accelerated :: " << endl;
+			augment_path(loop_header, functions, path);
+		}
 	}
-	else if (constraint_solver(dup_body, assign_insts, loop_cond, sink)) {
-		cout << "ConstraintSolving accelerated :: " << endl;
-		augment_path(loop_header, functions, dup_body);
-		return;
-	}
-	else {
-		return;
-	}
+	auto n_asgn = functions.insert_before(functions.instructions.begin());
+	n_asgn->make_assignment();
+	n_asgn->code = code_assignt(n_exp,
+			side_effect_expr_nondett(n_exp.type(), n_asgn->source_location));
+	auto n_ge_1 = functions.insert_after(n_asgn);
+	n_ge_1->make_assumption(binary_relation_exprt(n_exp,
+			ID_ge,
+			from_integer(1, n_exp.type())));
 }
 
 void acceleratort::accelerate_all_loops(goto_programt &goto_function) {
