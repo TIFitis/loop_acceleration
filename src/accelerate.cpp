@@ -380,12 +380,27 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		gather_syms(inst.code.op1(), loop_vars);
 	}
 	map<exprt, exprt> last_asgn;
+	map<exprt, exprt> hoist_tgt;
+	unsigned new_inst_added = 0;
+	goto_programt::targett hoist_loc =
+			g_p_c.insert_before(g_p_c.instructions.begin());
+	hoist_loc->make_skip();
 	for (auto it = assign_insts_c.begin(), it_e = assign_insts_c.end();
 			it != it_e; it++) {
 		g_p_c.update();
 		auto inst = *it;
 		auto &inst_code = to_code_assign(inst.code);
 		auto tgt = inst_code.lhs();
+		if (hoist_tgt.find(tgt) == hoist_tgt.end()) {
+			auto sym = create_symbol(from_expr(tgt), tgt.type());
+			goto_model.symbol_table.insert(sym);
+			auto hoist_inst = g_p_c.insert_after(hoist_loc);
+			hoist_inst->make_assignment();
+			hoist_inst->code = code_assignt(sym.symbol_expr(), tgt);
+			hoist_tgt[tgt] = sym.symbol_expr();
+			hoist_loc = hoist_inst;
+			new_inst_added++;
+		}
 		exprst src_syms, visited_syms;
 		get_all_sources(tgt, assign_insts_c, src_syms, visited_syms);
 		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
@@ -412,31 +427,31 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		cout << "\n\nClosedForm expr:\n" << from_expr(accelerated_func) << endl;
 		simplify(accelerated_func, namespacet(goto_model.symbol_table));
 		cout << "\n\nSimplified expr:\n" << from_expr(accelerated_func) << endl;
+		swap_all(accelerated_func, tgt, hoist_tgt[tgt]);
 		inst_code.rhs() = accelerated_func;
-//		swap_all(loop_cond, tgt, inst_code.rhs());
 		last_asgn[tgt] = inst_code.rhs();
 		auto x = g_p_c.instructions.begin();
-		advance(x, inst.location_number);
+		advance(x, inst.location_number + new_inst_added);
 		x->code = inst_code;
 		g_p_c.update();
 	}
 	for (auto a : last_asgn) {
 		swap_all(loop_cond, a.first, a.second);
 	}
-	g_p.copy_from(g_p_c);
-	g_p.update();
-	assign_insts = assign_insts_c;
 	swap_all(loop_cond,
 			n_exp,
 			minus_exprt(n_exp, from_integer(1, n_exp.type())));
-	goto_programt::targett si = g_p.instructions.begin();
-	for (auto it = g_p.instructions.begin(), it_e = g_p.instructions.end();
+	goto_programt::targett si = g_p_c.instructions.begin();
+	for (auto it = g_p_c.instructions.begin(), it_e = g_p_c.instructions.end();
 			it_e != it;) {
 		it++;
 		if (it != it_e) si++;
 	}
-	precondition(g_p, g_p.instructions.begin(), si, loop_cond);
+	precondition(g_p_c, hoist_loc, si, loop_cond);
+	g_p_c.update();
+	g_p.copy_from(g_p_c);
 	g_p.update();
+	assign_insts = assign_insts_c;
 	return true;
 }
 
@@ -451,7 +466,6 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		else
 			loop_cond_o = not_exprt(loop_header->guard);
 	}
-
 	auto n_sym = create_symbol(ACC_N, signedbv_typet(32), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();

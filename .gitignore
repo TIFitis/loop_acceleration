@@ -11,6 +11,8 @@ Debug/loop_acceleration
 *.gb
 *.i
 *.out
+*.smt
+*.dat
 
 # Prerequisites
 *.d
@@ -44,4 +46,3 @@ Debug/loop_acceleration
 *.exe
 *.out
 *.app
-/Debug/
