@@ -225,32 +225,43 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 		if (start->is_assign()) {
 			auto x = to_code_assign(start->code);
 			auto rh = x.rhs();
+			std::vector<exprt> que;
+			que.push_back(rh);
 			//std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
-			while (true) {
-				if (can_cast_expr<binary_exprt>(rh)
-						&& can_cast_type<bitvector_typet>(rh.type())) {
-					auto rh_ = to_binary_expr(rh);
-					auto bl = g_p.insert_after(start);
-					mp_integer max;
-					if (can_cast_type<unsignedbv_typet>(rh.type()))
-						max = to_unsignedbv_type(rh.type()).largest();
-					else if (can_cast_type<signedbv_typet>(rh.type()))
-						max = to_signedbv_type(rh.type()).largest();
-					else
-						max = string2integer(std::to_string(INT_MAX));
+			while (!que.empty()) {
+				rh = que.back();
+				que.pop_back();
+//				if (can_cast_expr<binary_exprt>(rh)
+//						&& can_cast_type<bitvector_typet>(rh.type())) {
+//					auto rh_ = to_binary_expr(rh);
+				auto bl = g_p.insert_after(start);
+				bl->make_skip();
+				mp_integer max;
+				if (can_cast_type<unsignedbv_typet>(rh.type()))
+					max = to_unsignedbv_type(rh.type()).largest();
+				else if (can_cast_type<signedbv_typet>(rh.type()))
+					max = to_signedbv_type(rh.type()).largest();
+				else
+					max = string2integer(std::to_string(INT_MAX));
+				if (rh.operands().size() > 1)
 					bl->make_assumption(binary_relation_exprt(rh,
 							ID_le,
 							from_integer(max, rh.type())));
-					rh = rh_.op1();
+				for (auto op : rh.operands())
+					que.push_back(op);
+//				if(rh.operands().size()>1)
+//				que.push_back(rh.op1());
 
-				}
-				else {
-					//std::cout<<from_expr(rh)<<" ;; >> Neither: "<<rh.id()<<std::endl;
-					break;
-				}
+//				}
+//			else {
+//				//std::cout<<from_expr(rh)<<" ;; >> Neither: "<<rh.id()<<std::endl;
+//				continue;
+//			}
 			}
 		} // for loop
 	}
+	remove_skip(g_p);
+	g_p.update();
 }
 
 bool acceleratort::augment_path(goto_programt::targett &loop_header,
@@ -284,7 +295,9 @@ void acceleratort::precondition(goto_programt &g_p,
 		goto_programt::targett loc,
 		goto_programt::targett sink,
 		exprt loop_cond) {
-//	auto j_asgn = g_p.insert_after(n_ge_1);
+//	auto n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
+//	auto j_asgn = g_p.insert_after(loc);
+//	auto j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
 //	j_asgn->make_assignment();
 //	j_asgn->code = code_assignt(j_exp,
 //			side_effect_expr_nondett(j_exp.type(), j_asgn->source_location));
@@ -295,14 +308,12 @@ void acceleratort::precondition(goto_programt &g_p,
 //	auto j_lt_n = g_p.insert_after(j_ge_0);
 //	j_lt_n->make_assumption(binary_relation_exprt(j_exp, ID_lt, n_exp));
 //	auto forall_assump = g_p.insert_after(j_lt_n);
-//	forall_assump->make_assignment();
-//	forall_assump->code = code_assignt(p_exp,
-//			forall_exprt(j_exp,
-//					and_exprt(and_exprt(binary_relation_exprt(j_exp,
-//							ID_ge,
-//							from_integer(0, j_exp.type())),
-//							binary_relation_exprt(j_exp, ID_le, n_exp)),
-//							loop_cond)));
+//	forall_assump->make_assumption(forall_exprt(j_exp,
+//			and_exprt(and_exprt(binary_relation_exprt(j_exp,
+//					ID_ge,
+//					from_integer(0, j_exp.type())),
+//					binary_relation_exprt(j_exp, ID_le, n_exp)),
+//					loop_cond)));
 	auto forall_assump2 = g_p.insert_after(loc);
 	forall_assump2->make_assumption(loop_cond);
 }
@@ -368,6 +379,7 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		gather_syms(inst.code.op0(), loop_vars);
 		gather_syms(inst.code.op1(), loop_vars);
 	}
+	map<exprt, exprt> last_asgn;
 	for (auto it = assign_insts_c.begin(), it_e = assign_insts_c.end();
 			it != it_e; it++) {
 		g_p_c.update();
@@ -401,11 +413,15 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		simplify(accelerated_func, namespacet(goto_model.symbol_table));
 		cout << "\n\nSimplified expr:\n" << from_expr(accelerated_func) << endl;
 		inst_code.rhs() = accelerated_func;
-		swap_all(loop_cond, tgt, inst_code.rhs());
+//		swap_all(loop_cond, tgt, inst_code.rhs());
+		last_asgn[tgt] = inst_code.rhs();
 		auto x = g_p_c.instructions.begin();
 		advance(x, inst.location_number);
 		x->code = inst_code;
 		g_p_c.update();
+	}
+	for (auto a : last_asgn) {
+		swap_all(loop_cond, a.first, a.second);
 	}
 	g_p.copy_from(g_p_c);
 	g_p.update();
