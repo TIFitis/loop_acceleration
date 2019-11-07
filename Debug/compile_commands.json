@@ -1,0 +1,94 @@
+[
+ {
+  "directory": "/media/supreets51/Sup/c2/loop_acceleration/Debug",
+  "arguments": [
+   "g++",
+   "-I../cbmc/src",
+   "-O0",
+   "-g3",
+   "-Wall",
+   "-c",
+   "-fmessage-length=0",
+   "-Wno-deprecated",
+   "-Wno-deprecated-declarations",
+   "-DSATCHECK_MINISAT2",
+   "-MMD",
+   "-MP",
+   "-MFsrc/accelerate.d",
+   "-MTsrc/accelerate.o",
+   "-o",
+   "src/accelerate.o",
+   "../src/accelerate.cpp"
+  ],
+  "file": "../src/accelerate.cpp"
+ },
+ {
+  "directory": "/media/supreets51/Sup/c2/loop_acceleration/Debug",
+  "arguments": [
+   "g++",
+   "-I../cbmc/src",
+   "-O0",
+   "-g3",
+   "-Wall",
+   "-c",
+   "-fmessage-length=0",
+   "-Wno-deprecated",
+   "-Wno-deprecated-declarations",
+   "-DSATCHECK_MINISAT2",
+   "-MMD",
+   "-MP",
+   "-MFsrc/loop_acceleration.d",
+   "-MTsrc/loop_acceleration.o",
+   "-o",
+   "src/loop_acceleration.o",
+   "../src/loop_acceleration.cpp"
+  ],
+  "file": "../src/loop_acceleration.cpp"
+ },
+ {
+  "directory": "/media/supreets51/Sup/c2/loop_acceleration/Debug",
+  "arguments": [
+   "g++",
+   "-I../cbmc/src",
+   "-O0",
+   "-g3",
+   "-Wall",
+   "-c",
+   "-fmessage-length=0",
+   "-Wno-deprecated",
+   "-Wno-deprecated-declarations",
+   "-DSATCHECK_MINISAT2",
+   "-MMD",
+   "-MP",
+   "-MFsrc/util.d",
+   "-MTsrc/util.o",
+   "-o",
+   "src/util.o",
+   "../src/util.cpp"
+  ],
+  "file": "../src/util.cpp"
+ },
+ {
+  "directory": "/media/supreets51/Sup/c2/loop_acceleration/Debug",
+  "arguments": [
+   "g++",
+   "-I../cbmc/src",
+   "-O0",
+   "-g3",
+   "-Wall",
+   "-c",
+   "-fmessage-length=0",
+   "-Wno-deprecated",
+   "-Wno-deprecated-declarations",
+   "-DSATCHECK_MINISAT2",
+   "-MMD",
+   "-MP",
+   "-MFsrc/z3_formula.d",
+   "-MTsrc/z3_formula.o",
+   "-o",
+   "src/z3_formula.o",
+   "../src/z3_formula.cpp"
+  ],
+  "file": "../src/z3_formula.cpp"
+ }
+]

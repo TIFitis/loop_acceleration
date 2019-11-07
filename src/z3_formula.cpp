@@ -113,6 +113,7 @@ std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts
 		exprst rhs_syms;
 		loop_acc::acceleratort::gather_syms(rhs_e, rhs_syms);
 		for (auto &a : rhs_syms) {
+		    std::cerr<<"Debg: "<<from_expr(a)<<std::endl;
 			if (my_syms.find(a) != my_syms.end()) {
 				rhs_syms.erase(a);
 			}
