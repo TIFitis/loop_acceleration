@@ -120,24 +120,30 @@ set<goto_programt*>& acceleratort::create_dup_loop(goto_programt::targett &loop_
 		}
 	}
 	remove_skip(dup_body);
-	cout << "========dup_body==========" << endl;
-	dup_body.output(cout);
-	cout << "========dup_body==========" << endl;
-	cout << "========branches==========" << endl;
 	map<goto_programt::targett, unsigned> path_explored;
+#if DBGLEVEL >= 3
+	if(!branches.empty())
+		cout << "========branches==========" << endl;
 	for (auto s : branches) {
 		path_explored[s] = 0;
 		cout << from_expr(s->guard) << endl;
 	}
-	cout << "========branches==========" << endl;
+	if(!branches.empty())
+		cout << "========branches==========" << endl;
+#endif
 	set<goto_programt*> &paths = *new set<goto_programt*>();
 	generate_paths(dup_body, branches, branches.begin(), path_explored, paths);
+
+#if DBGLEVEL >= 2
 	cout << paths.size() << " paths generated!" << endl;
+#endif
+#if DBGLEVEL >= 5
 	for (auto a : paths) {
 		cout << "========path-begin==========" << endl;
 		a->output(cout);
 		cout << "========path-end==========" << endl;
 	}
+#endif
 	return paths;
 }
 
@@ -231,9 +237,6 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 			while (!que.empty()) {
 				rh = que.back();
 				que.pop_back();
-//				if (can_cast_expr<binary_exprt>(rh)
-//						&& can_cast_type<bitvector_typet>(rh.type())) {
-//					auto rh_ = to_binary_expr(rh);
 				auto bl = g_p.insert_after(start);
 				bl->make_skip();
 				mp_integer max;
@@ -249,14 +252,6 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 							from_integer(max, rh.type())));
 				for (auto op : rh.operands())
 					que.push_back(op);
-//				if(rh.operands().size()>1)
-//				que.push_back(rh.op1());
-
-//				}
-//			else {
-//				//std::cout<<from_expr(rh)<<" ;; >> Neither: "<<rh.id()<<std::endl;
-//				continue;
-//			}
 			}
 		} // for loop
 	}
@@ -268,9 +263,11 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 		goto_programt &functions,
 		goto_programt &aux_path) {
 	add_overflow_checks(aux_path);
+#if DBGLEVEL >= 3
 	cout << "========auxpath==========" << endl;
 	aux_path.output(cout);
 	cout << "========auxpath==========" << endl;
+#endif
 	auto split = functions.insert_before(loop_header);
 	split->make_goto(loop_header,
 			side_effect_expr_nondett(bool_typet(), split->source_location));
@@ -322,7 +319,7 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
 		exprt loop_cond,
 		goto_programt::targett sink) {
-#ifdef NO_SYNTACTIC
+#if NO_SYNTACTIC
 	return false;
 #endif
 	goto_programt g_p_c;
@@ -407,12 +404,6 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 			cout << "Skipping : " << from_expr(inst.code) << endl;
 			continue;
 		}
-//		goto_programt::instructionst relevant_insts;
-//		for (auto it2 = assign_insts_c.begin(), it_e2 = assign_insts_c.end();
-//				it2 != it_e2 && it2 != it; it2++) {
-//			auto &inst_code = to_code_assign(it2->code);
-//			relevant_insts.push_back(*it2);
-//		}
 		z3_parse parser { };
 		parser.new_build(loop_vars, tgt, assign_insts_c, inst);
 		parser.z3_fire();
@@ -424,9 +415,14 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 			return false;
 		}
 		exprt accelerated_func = parser.getAccFunc(z3_model, loop_vars, n_exp);
+
+#if DBGLEVEL >= 3
 		cout << "\n\nClosedForm expr:\n" << from_expr(accelerated_func) << endl;
+#endif
 		simplify(accelerated_func, namespacet(goto_model.symbol_table));
+#if DBGLEVEL >= 3
 		cout << "\n\nSimplified expr:\n" << from_expr(accelerated_func) << endl;
+#endif
 		swap_all(accelerated_func, tgt, hoist_tgt[tgt]);
 		inst_code.rhs() = accelerated_func;
 		last_asgn[tgt] = inst_code.rhs();
@@ -500,11 +496,15 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		goto_safe->make_goto(safe, true_exprt());
 
 		if (syntactic_matching(path, assign_insts, loop_cond, sink)) {
+#if DBGLEVEL >= 3
 			cout << "SyntactingMatching accelerated :: " << endl;
+#endif
 			augment_path(loop_header, functions, path);
 		}
 		else if (constraint_solver(path, assign_insts, loop_cond, sink)) {
+#if DBGLEVEL >= 3
 			cout << "ConstraintSolving accelerated :: " << endl;
+#endif
 			augment_path(loop_header, functions, path);
 		}
 	}
