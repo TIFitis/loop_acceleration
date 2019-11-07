@@ -227,6 +227,33 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 void acceleratort::add_overflow_checks(goto_programt &g_p) {
 	for (auto start = g_p.instructions.begin(), end = g_p.instructions.end();
 			start != end; start++) {
+		if (start->is_assume()) {
+//			auto x = to_code_assign(start->code);
+			auto rh = start->guard;
+			std::vector<exprt> que;
+			que.push_back(rh);
+			//std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
+			while (!que.empty()) {
+				rh = que.back();
+				que.pop_back();
+				auto bl = g_p.insert_before(start);
+				bl->make_skip();
+				for (auto op : rh.operands())
+					que.push_back(op);
+				mp_integer max = power(2, 16) - 1;
+				if (rh.type().id() == ID_bool) continue;
+//				if (can_cast_type<unsignedbv_typet>(rh.type()))
+//					max = to_unsignedbv_type(rh.type()).largest();
+//				else if (can_cast_type<signedbv_typet>(rh.type()))
+//					max = to_signedbv_type(rh.type()).largest();
+//				else
+//					max = string2integer(std::to_string(INT_MAX));
+				if (rh.operands().size() > 1)
+					bl->make_assumption(binary_relation_exprt(rh,
+							ID_le,
+							from_integer(max, rh.type())));
+			}
+		} // for loop
 		if (start->is_assign()) {
 			auto x = to_code_assign(start->code);
 			auto rh = x.rhs();
@@ -238,13 +265,13 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 				que.pop_back();
 				auto bl = g_p.insert_before(start);
 				bl->make_skip();
-				mp_integer max;
-				if (can_cast_type<unsignedbv_typet>(rh.type()))
-					max = to_unsignedbv_type(rh.type()).largest();
-				else if (can_cast_type<signedbv_typet>(rh.type()))
-					max = to_signedbv_type(rh.type()).largest();
-				else
-					max = string2integer(std::to_string(INT_MAX));
+				mp_integer max = power(2, 16) - 1;
+//				if (can_cast_type<unsignedbv_typet>(rh.type()))
+//					max = to_unsignedbv_type(rh.type()).largest();
+//				else if (can_cast_type<signedbv_typet>(rh.type()))
+//					max = to_signedbv_type(rh.type()).largest();
+//				else
+//					max = string2integer(std::to_string(INT_MAX));
 				if (rh.operands().size() > 1)
 					bl->make_assumption(binary_relation_exprt(rh,
 							ID_le,
