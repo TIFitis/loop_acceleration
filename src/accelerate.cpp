@@ -32,6 +32,8 @@ void acceleratort::generate_paths(goto_programt &dup_body,
 				dup_body.instructions.end(); tgt_it != tgt_end;
 				tgt_it++, path_it++) {
 			if (tgt_it->is_goto()) {
+				if (find(branches.begin(), branches.end(), tgt_it)
+						== branches.end()) continue;
 				if (tgt_it->guard == true_exprt()) {
 					for (auto it_new = path_it, new_tgt_end =
 							path_it->get_target(); it_new != new_tgt_end;
@@ -42,8 +44,6 @@ void acceleratort::generate_paths(goto_programt &dup_body,
 					tgt_it--;
 					continue;
 				}
-				if (find(branches.begin(), branches.end(), tgt_it)
-						== branches.end()) continue;
 				if (path_explored[tgt_it] == 1) {
 					for (auto it_new = path_it, new_it_end =
 							path_it->get_target(); it_new != new_it_end;
@@ -103,14 +103,13 @@ set<goto_programt*>& acceleratort::create_dup_loop(goto_programt::targett &loop_
 						dup_body_it->targets.push_back(sink);
 					}
 					else {
-						if (tgt_it->guard != true_exprt())
-							branches.push_back(dup_body_it);
+						branches.push_back(dup_body_it);
 					}
 				}
 				else if (t == loop_header) {
-					dup_body_it->make_skip();
-//					start->targets.clear();
-//					start->targets.push_back(end);
+//					dup_body_it->make_skip();
+//					dup_body_it->targets.clear();
+//					dup_body_it->targets.push_back(end);
 				}
 				else {
 					dup_body_it->targets.clear();
@@ -237,7 +236,7 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 			while (!que.empty()) {
 				rh = que.back();
 				que.pop_back();
-				auto bl = g_p.insert_after(start);
+				auto bl = g_p.insert_before(start);
 				bl->make_skip();
 				mp_integer max;
 				if (can_cast_type<unsignedbv_typet>(rh.type()))
@@ -262,7 +261,6 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 bool acceleratort::augment_path(goto_programt::targett &loop_header,
 		goto_programt &functions,
 		goto_programt &aux_path) {
-	add_overflow_checks(aux_path);
 #if DBGLEVEL >= 3
 	cout << "========auxpath==========" << endl;
 	aux_path.output(cout);
@@ -272,7 +270,6 @@ bool acceleratort::augment_path(goto_programt::targett &loop_header,
 	split->make_goto(loop_header,
 			side_effect_expr_nondett(bool_typet(), split->source_location));
 	split->code = code_gotot();
-	functions.update();
 	functions.destructive_insert(loop_header, aux_path);
 	functions.update();
 	loop_header = split;
@@ -476,10 +473,12 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	auto j_exp = j_sym.symbol_expr();
 	auto p_sym = create_symbol(ACC_P, bool_typet(), true);
 	goto_model.symbol_table.insert(p_sym);
-
+	auto end = loop_header->get_target();
 	for (auto path_ptr : paths) {
 		exprt loop_cond = loop_cond_o;
 		auto &path = *path_ptr;
+		auto path_loop_header = path.instructions.begin();
+		cout << "path_header :: " << from_expr(path_loop_header->guard) << endl;
 		auto sink = path.instructions.end();
 		sink--;
 		assert(sink->is_assume() && sink->guard == false_exprt()
@@ -496,21 +495,47 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 				assign_tgts.insert(x.lhs());
 			}
 		}
-		auto safe = path.insert_after(sink);
-		safe->make_skip();
-		auto goto_safe = path.insert_before(sink);
-		goto_safe->make_goto(safe, true_exprt());
+//		auto safe = path.insert_after(sink);
+//		safe->make_skip();
+//		auto goto_safe = path.insert_before(sink);
+//		goto_safe->make_goto(safe, true_exprt());
 
 		if (syntactic_matching(path, assign_insts, loop_cond, sink)) {
 #if DBGLEVEL >= 3
 			cout << "SyntactingMatching accelerated :: " << endl;
 #endif
+			add_overflow_checks(path);
+			path_loop_header++;
+			for (auto &i : path.instructions) {
+				if (i.is_goto()) {
+					for (auto &t : i.targets) {
+						if (t == path_loop_header) {
+							i.targets.clear();
+							i.targets.push_back(end);
+							break;
+						}
+					}
+				}
+			}
 			augment_path(loop_header, functions, path);
 		}
 		else if (constraint_solver(path, assign_insts, loop_cond, sink)) {
 #if DBGLEVEL >= 3
 			cout << "ConstraintSolving accelerated :: " << endl;
 #endif
+			add_overflow_checks(path);
+			path_loop_header++;
+			for (auto &i : path.instructions) {
+				if (i.is_goto()) {
+					for (auto &t : i.targets) {
+						if (t == path_loop_header) {
+							i.targets.clear();
+							i.targets.push_back(end);
+							break;
+						}
+					}
+				}
+			}
 			augment_path(loop_header, functions, path);
 		}
 	}
