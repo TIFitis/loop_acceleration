@@ -3,10 +3,11 @@ int main(){
     int i = 0;
     int buflen = 100;
     int j = 1;
-    while(i<5){
-        i+=2;
+    while(i<buflen/3){
+        i+=4;
         j+=i;
         assert(j <= buflen);
     }
     return 0;
 }
+

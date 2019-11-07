@@ -7,7 +7,6 @@ int main(){
         i += 2;
         j += 3;
     }
-    
     assert(0);
     return 0;
 }

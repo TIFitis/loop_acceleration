@@ -73,7 +73,7 @@ void acceleratort::generate_paths(goto_programt &dup_body,
 	generate_paths(dup_body, branches, cur_branch, path_explored, paths);
 }
 
-set<goto_programt*>& acceleratort::create_dup_loop(goto_programt::targett &loop_header,
+set<goto_programt*>& acceleratort::create_dup_loop(const goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
 	goto_programt &dup_body = *(new goto_programt());
@@ -227,47 +227,53 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 void acceleratort::add_overflow_checks(goto_programt &g_p) {
 	for (auto start = g_p.instructions.begin(), end = g_p.instructions.end();
 			start != end; start++) {
-		if (start->is_assume()) {
-//			auto x = to_code_assign(start->code);
-			auto rh = start->guard;
-			std::vector<exprt> que;
-			que.push_back(rh);
-			//std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
-			while (!que.empty()) {
-				rh = que.back();
-				que.pop_back();
-				auto bl = g_p.insert_before(start);
-				bl->make_skip();
-				for (auto op : rh.operands())
-					que.push_back(op);
-				mp_integer max = power(2, 16) - 1;
-				if (rh.type().id() == ID_bool) continue;
-				if (rh.operands().size() > 1) {
-					if (can_cast_expr<mult_exprt>(rh)) {
-						bl->make_assumption(binary_relation_exprt(rh.op0(),
-								ID_le,
-								div_exprt(from_integer(max, rh.type()),
-										rh.op1())));
-					}
-					else if (can_cast_expr<plus_exprt>(rh)) {
-						bl->make_assumption(binary_relation_exprt(rh.op0(),
-								ID_le,
-								minus_exprt(from_integer(max, rh.type()),
-										rh.op1())));
-					}
-					else if (can_cast_expr<minus_exprt>(rh)) {
-						bl->make_assumption(binary_relation_exprt(rh.op0(),
-								ID_le,
-								plus_exprt(from_integer(max, rh.type()),
-										rh.op1())));
-					}
-					else
-						bl->make_assumption(binary_relation_exprt(rh,
-								ID_le,
-								from_integer(max, rh.type())));
-				}
-			}
-		} // for loop
+//		if (start->is_assume()) {
+////			auto x = to_code_assign(start->code);
+//			auto rh = start->guard;
+//			std::vector<exprt> que;
+//			que.push_back(rh);
+//			//std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
+//			while (!que.empty()) {
+//				rh = que.back();
+//				que.pop_back();
+//				auto bl = g_p.insert_before(start);
+//				bl->make_skip();
+//				for (auto op : rh.operands())
+//					que.push_back(op);
+//				mp_integer max;
+//				if (can_cast_type<unsignedbv_typet>(rh.type()))
+//					max = to_unsignedbv_type(rh.type()).largest();
+//				else if (can_cast_type<signedbv_typet>(rh.type()))
+//					max = to_signedbv_type(rh.type()).largest();
+//				else
+//					max = string2integer(std::to_string(INT_MAX));
+//				if (rh.type().id() == ID_bool) continue;
+//				if (rh.operands().size() > 1) {
+//					if (can_cast_expr<mult_exprt>(rh)) {
+//						bl->make_assumption(binary_relation_exprt(rh.op0(),
+//								ID_le,
+//								div_exprt(from_integer(max, rh.type()),
+//										rh.op1())));
+//					}
+////					else if (can_cast_expr<plus_exprt>(rh)) {
+////						bl->make_assumption(binary_relation_exprt(rh.op0(),
+////								ID_le,
+////								minus_exprt(from_integer(max, rh.type()),
+////										rh.op1())));
+////					}
+////					else if (can_cast_expr<minus_exprt>(rh)) {
+////						bl->make_assumption(binary_relation_exprt(rh.op0(),
+////								ID_le,
+////								plus_exprt(from_integer(max, rh.type()),
+////										rh.op1())));
+////					}
+//					else
+//						bl->make_assumption(binary_relation_exprt(rh,
+//								ID_le,
+//								from_integer(max, rh.type())));
+//				}
+//			}
+//		} // for loop
 		if (start->is_assign()) {
 			auto x = to_code_assign(start->code);
 			auto rh = x.rhs();
@@ -288,10 +294,16 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 					max = string2integer(std::to_string(INT_MAX));
 				if (rh.operands().size() > 1) {
 					if (can_cast_expr<mult_exprt>(rh)) {
-						bl->make_assumption(binary_relation_exprt(rh.op0(),
-								ID_le,
-								div_exprt(from_integer(max, rh.type()),
-										rh.op1())));
+						if (can_cast_expr<symbol_exprt>(rh.op1()))
+							bl->make_assumption(binary_relation_exprt(rh.op1(),
+									ID_le,
+									div_exprt(from_integer(max, rh.type()),
+											rh.op0())));
+						else
+							bl->make_assumption(binary_relation_exprt(rh.op0(),
+									ID_le,
+									div_exprt(from_integer(max, rh.type()),
+											rh.op1())));
 					}
 					else if (can_cast_expr<plus_exprt>(rh)) {
 						bl->make_assumption(binary_relation_exprt(rh.op0(),
@@ -299,12 +311,12 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 								minus_exprt(from_integer(max, rh.type()),
 										rh.op1())));
 					}
-					else if (can_cast_expr<minus_exprt>(rh)) {
-						bl->make_assumption(binary_relation_exprt(rh.op0(),
-								ID_le,
-								plus_exprt(from_integer(max, rh.type()),
-										rh.op1())));
-					}
+//					else if (can_cast_expr<minus_exprt>(rh)) {
+//						bl->make_assumption(binary_relation_exprt(rh.op0(),
+//								ID_le,
+//								plus_exprt(from_integer(max, rh.type()),
+//										rh.op1())));
+//					}
 					else
 						bl->make_assumption(binary_relation_exprt(rh,
 								ID_le,
@@ -415,8 +427,12 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 		it++;
 		if (it != it_e) si++;
 	}
-	precondition(g_p, g_p.instructions.begin(), si, loop_cond);
+	goto_programt::targett hoist_loc =
+			g_p.insert_before(g_p.instructions.begin());
+	hoist_loc->make_skip();
+	precondition(g_p, hoist_loc, si, loop_cond);
 	g_p.update();
+	add_overflow_checks(g_p);
 	return true;
 }
 
@@ -485,7 +501,6 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		inst_code.rhs() = accelerated_func;
 		last_asgn[tgt] = inst_code.rhs();
 		auto x = g_p_c.instructions.begin();
-		cout << "added :: " << new_inst_added << endl;
 		advance(x, inst.location_number + new_inst_added);
 		x->code = inst_code;
 		g_p_c.update();
@@ -510,12 +525,13 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	precondition(g_p_c, hoist_loc, si, loop_cond);
 	g_p_c.update();
 	g_p.copy_from(g_p_c);
+	add_overflow_checks(g_p);
 	g_p.update();
 	assign_insts = assign_insts_c;
 	return true;
 }
 
-void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
+void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 		natural_loops_mutablet::natural_loopt &loop,
 		goto_programt &functions) {
 	auto &paths = create_dup_loop(loop_header, loop, functions);
@@ -526,6 +542,7 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 		else
 			loop_cond_o = not_exprt(loop_header->guard);
 	}
+	auto split_loc = loop_header;
 	auto n_sym = create_symbol(ACC_N, signedbv_typet(32), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();
@@ -535,11 +552,11 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 	auto p_sym = create_symbol(ACC_P, bool_typet(), true);
 	goto_model.symbol_table.insert(p_sym);
 	auto end = loop_header->get_target();
+	unsigned no_paths_accelerated = 0;
 	for (auto path_ptr : paths) {
 		exprt loop_cond = loop_cond_o;
 		auto &path = *path_ptr;
 		auto path_loop_header = path.instructions.begin();
-		cout << "path_header :: " << from_expr(path_loop_header->guard) << endl;
 		auto sink = path.instructions.end();
 		sink--;
 		assert(sink->is_assume() && sink->guard == false_exprt()
@@ -565,8 +582,12 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 #if DBGLEVEL >= 3
 			cout << "SyntactingMatching accelerated :: " << endl;
 #endif
-			add_overflow_checks(path);
-			path_loop_header++;
+			no_paths_accelerated++;
+			for (auto it = path.instructions.begin();; it++)
+				if (it->is_goto()) {
+					path_loop_header = it;
+					break;
+				}
 			for (auto &i : path.instructions) {
 				if (i.is_goto()) {
 					for (auto &t : i.targets) {
@@ -578,14 +599,18 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 					}
 				}
 			}
-			augment_path(loop_header, functions, path);
+			augment_path(split_loc, functions, path);
 		}
 		else if (constraint_solver(path, assign_insts, loop_cond, sink)) {
 #if DBGLEVEL >= 3
 			cout << "ConstraintSolving accelerated :: " << endl;
 #endif
-			add_overflow_checks(path);
-			path_loop_header++;
+			no_paths_accelerated++;
+			for (auto it = path.instructions.begin();; it++)
+				if (it->is_goto()) {
+					path_loop_header = it;
+					break;
+				}
 			for (auto &i : path.instructions) {
 				if (i.is_goto()) {
 					for (auto &t : i.targets) {
@@ -597,9 +622,10 @@ void acceleratort::accelerate_loop(goto_programt::targett &loop_header,
 					}
 				}
 			}
-			augment_path(loop_header, functions, path);
+			augment_path(split_loc, functions, path);
 		}
 	}
+	cout << "Accelerated " << no_paths_accelerated << " paths." << endl;
 	auto n_asgn = functions.insert_before(functions.instructions.begin());
 	n_asgn->make_assignment();
 	n_asgn->code = code_assignt(n_exp,

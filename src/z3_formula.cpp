@@ -220,7 +220,6 @@ bool z3_parse::z3_fire() {
 	FILE *fp = fopen("z3_input.smt", "w");
 	assert(fp != nullptr && "couldnt create input file for z3");
 	formula.append("(check-sat)\n");
-	std::cout << "set_size :: " << input_set[0].size() << std::endl;
 	for (auto i = 1u; i <= input_set[0].size() * 2; i++) {
 		formula.append("(get-value (alpha_" + std::to_string(i) + "))\n");
 	}

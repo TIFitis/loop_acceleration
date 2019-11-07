@@ -22,10 +22,10 @@ class loop_acc::acceleratort {
 
 	void accelerate_all_functions();
 	void accelerate_all_loops(goto_programt&);
-	void accelerate_loop(goto_programt::targett&,
+	void accelerate_loop(const goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
 			goto_programt&);
-	std::set<goto_programt*>& create_dup_loop(goto_programt::targett&,
+	std::set<goto_programt*>& create_dup_loop(const goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
 			goto_programt&);
 	void get_all_sources(exprt,
