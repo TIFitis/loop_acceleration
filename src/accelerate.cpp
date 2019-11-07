@@ -242,16 +242,30 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 					que.push_back(op);
 				mp_integer max = power(2, 16) - 1;
 				if (rh.type().id() == ID_bool) continue;
-//				if (can_cast_type<unsignedbv_typet>(rh.type()))
-//					max = to_unsignedbv_type(rh.type()).largest();
-//				else if (can_cast_type<signedbv_typet>(rh.type()))
-//					max = to_signedbv_type(rh.type()).largest();
-//				else
-//					max = string2integer(std::to_string(INT_MAX));
-				if (rh.operands().size() > 1)
-					bl->make_assumption(binary_relation_exprt(rh,
-							ID_le,
-							from_integer(max, rh.type())));
+				if (rh.operands().size() > 1) {
+					if (can_cast_expr<mult_exprt>(rh)) {
+						bl->make_assumption(binary_relation_exprt(rh.op0(),
+								ID_le,
+								div_exprt(from_integer(max, rh.type()),
+										rh.op1())));
+					}
+					else if (can_cast_expr<plus_exprt>(rh)) {
+						bl->make_assumption(binary_relation_exprt(rh.op0(),
+								ID_le,
+								minus_exprt(from_integer(max, rh.type()),
+										rh.op1())));
+					}
+					else if (can_cast_expr<minus_exprt>(rh)) {
+						bl->make_assumption(binary_relation_exprt(rh.op0(),
+								ID_le,
+								plus_exprt(from_integer(max, rh.type()),
+										rh.op1())));
+					}
+					else
+						bl->make_assumption(binary_relation_exprt(rh,
+								ID_le,
+								from_integer(max, rh.type())));
+				}
 			}
 		} // for loop
 		if (start->is_assign()) {
@@ -265,17 +279,37 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 				que.pop_back();
 				auto bl = g_p.insert_before(start);
 				bl->make_skip();
-				mp_integer max = power(2, 16) - 1;
-//				if (can_cast_type<unsignedbv_typet>(rh.type()))
-//					max = to_unsignedbv_type(rh.type()).largest();
-//				else if (can_cast_type<signedbv_typet>(rh.type()))
-//					max = to_signedbv_type(rh.type()).largest();
-//				else
-//					max = string2integer(std::to_string(INT_MAX));
-				if (rh.operands().size() > 1)
-					bl->make_assumption(binary_relation_exprt(rh,
-							ID_le,
-							from_integer(max, rh.type())));
+				mp_integer max;
+				if (can_cast_type<unsignedbv_typet>(rh.type()))
+					max = to_unsignedbv_type(rh.type()).largest();
+				else if (can_cast_type<signedbv_typet>(rh.type()))
+					max = to_signedbv_type(rh.type()).largest();
+				else
+					max = string2integer(std::to_string(INT_MAX));
+				if (rh.operands().size() > 1) {
+					if (can_cast_expr<mult_exprt>(rh)) {
+						bl->make_assumption(binary_relation_exprt(rh.op0(),
+								ID_le,
+								div_exprt(from_integer(max, rh.type()),
+										rh.op1())));
+					}
+					else if (can_cast_expr<plus_exprt>(rh)) {
+						bl->make_assumption(binary_relation_exprt(rh.op0(),
+								ID_le,
+								minus_exprt(from_integer(max, rh.type()),
+										rh.op1())));
+					}
+					else if (can_cast_expr<minus_exprt>(rh)) {
+						bl->make_assumption(binary_relation_exprt(rh.op0(),
+								ID_le,
+								plus_exprt(from_integer(max, rh.type()),
+										rh.op1())));
+					}
+					else
+						bl->make_assumption(binary_relation_exprt(rh,
+								ID_le,
+								from_integer(max, rh.type())));
+				}
 				for (auto op : rh.operands())
 					que.push_back(op);
 			}
