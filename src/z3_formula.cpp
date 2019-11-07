@@ -79,7 +79,7 @@ void z3_parse::build_input_set(unsigned k) {
 void z3_parse::add_alpha_decl(unsigned k) {
 	for (unsigned i = 1; i <= 2 * (k + 1); i++) {
 		formula.append("(declare-const alpha_" + std::to_string(i) + " Int)\n");
-		formula.append("(assert (>= alpha_" + std::to_string(i) + " 0))\n");
+//		formula.append("(assert (>= alpha_" + std::to_string(i) + " 0))\n");
 	}
 }
 
@@ -219,9 +219,13 @@ void z3_parse::new_build(exprst &loop_vars,
 bool z3_parse::z3_fire() {
 	FILE *fp = fopen("z3_input.smt", "w");
 	assert(fp != nullptr && "couldnt create input file for z3");
-	formula.append("(check-sat)\n(get-model)\n");
+	formula.append("(check-sat)\n");
+	std::cout << "set_size :: " << input_set[0].size() << std::endl;
+	for (auto i = 1u; i <= input_set[0].size() * 2; i++) {
+		formula.append("(get-value (alpha_" + std::to_string(i) + "))\n");
+	}
 #if DBGLEVEL >= 5
-	std::cout << "\n========Formula==========\n"
+			std::cout << "\n========Formula==========\n"
 			<< formula
 			<< "========Formula==========\n"
 			<< std::endl;
@@ -247,18 +251,23 @@ std::map<std::string, int> z3_parse::get_z3_model(std::string filename) {
 	if (raw_input.find("unsat") != raw_input.npos) return values;
 
 	while (1) {
-		auto loc = raw_input.find("define-fun");
+		auto loc = raw_input.find("(");
 		if (loc == raw_input.npos) break;
-		raw_input = raw_input.substr(loc + 11, raw_input.npos);
+		raw_input = raw_input.substr(loc + 2, raw_input.npos);
 		loc = raw_input.find(" ");
 		auto name = raw_input.substr(0, loc);
-		loc = raw_input.find("Int");
-		raw_input = raw_input.substr(loc + 8, raw_input.npos);
+		raw_input = raw_input.substr(loc + 1, raw_input.npos);
 		loc = raw_input.find(")");
 		auto val_s = raw_input.substr(0, loc);
+		bool minus_flag = false;
+		if (val_s[0] == '(') {
+			val_s = val_s.substr(3, val_s.npos);
+			minus_flag = true;
+		}
 		std::stringstream val_ss(val_s);
 		int x = 0;
 		val_ss >> x;
+		if (minus_flag) x = -x;
 		values[name] = x;
 	}
 
