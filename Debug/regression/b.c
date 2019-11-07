@@ -5,7 +5,7 @@ int main(){
     int j=0, n = 1, a = 2, x;
     while(i < buflen && j<buflen){
         i += 2;
-        j+=3;
+        j += 3;
     }
     
     assert(0);

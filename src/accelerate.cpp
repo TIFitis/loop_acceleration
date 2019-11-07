@@ -378,10 +378,10 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	}
 	map<exprt, exprt> last_asgn;
 	map<exprt, exprt> hoist_tgt;
-	unsigned new_inst_added = 0;
 	goto_programt::targett hoist_loc =
 			g_p_c.insert_before(g_p_c.instructions.begin());
 	hoist_loc->make_skip();
+	unsigned new_inst_added = 1;
 	for (auto it = assign_insts_c.begin(), it_e = assign_insts_c.end();
 			it != it_e; it++) {
 		g_p_c.update();
@@ -423,13 +423,19 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 #if DBGLEVEL >= 3
 		cout << "\n\nSimplified expr:\n" << from_expr(accelerated_func) << endl;
 #endif
-		swap_all(accelerated_func, tgt, hoist_tgt[tgt]);
+//		swap_all(accelerated_func, tgt, hoist_tgt[tgt]);
 		inst_code.rhs() = accelerated_func;
 		last_asgn[tgt] = inst_code.rhs();
 		auto x = g_p_c.instructions.begin();
+		cout << "added :: " << new_inst_added << endl;
 		advance(x, inst.location_number + new_inst_added);
 		x->code = inst_code;
 		g_p_c.update();
+	}
+	for (auto &i : g_p_c.instructions) {
+		if (i.is_assign()) for (auto t : hoist_tgt) {
+			swap_all(i.code.op1(), t.first, t.second);
+		}
 	}
 	for (auto a : last_asgn) {
 		swap_all(loop_cond, a.first, a.second);
