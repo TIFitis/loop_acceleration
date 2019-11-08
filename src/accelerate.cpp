@@ -190,8 +190,9 @@ symbolt acceleratort::create_symbol(string name,
 	if (force)
 		symbol.name = name;
 	else
-		symbol.name = name + to_string(var_counter);
+		symbol.name = "__acc_" + name + "_" + to_string(var_counter);
 	symbol.base_name = symbol.name;
+	assert(var_counter < UINT_MAX && "Oops too many variables have added !");
 	var_counter++;
 	symbol.type = type;
 	symbol.mode = ID_C;
@@ -224,108 +225,84 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 	return false;
 }
 
+void add_overflow_assumes(goto_programt &g_p,
+		goto_programt::targett &loc,
+		exprt rh) {
+	if (rh.operands().size() > 1) for (auto op : rh.operands())
+		add_overflow_assumes(g_p, loc, op);
+	auto bl = g_p.insert_after(loc);
+	bl->make_skip();
+	loc = bl;
+	mp_integer max;
+	if (can_cast_type<unsignedbv_typet>(rh.type()))
+		max = to_unsignedbv_type(rh.type()).largest();
+	else if (can_cast_type<signedbv_typet>(rh.type()))
+		max = to_signedbv_type(rh.type()).largest();
+	else if (rh.type().id() == ID_bool)
+		return;
+	else
+		assert(false && "Unhandled overflow type!");
+	if (rh.operands().size() > 1) {
+		if (can_cast_expr<mult_exprt>(rh)) {
+			bl->make_assumption(binary_relation_exprt(rh.op0(),
+					ID_le,
+					div_exprt(from_integer(max, rh.type()), rh.op1())));
+		}
+		else {
+			if (can_cast_expr<minus_exprt>(rh))
+				rh = plus_exprt(rh.op0(), unary_minus_exprt(rh.op1()));
+			if (can_cast_expr<plus_exprt>(rh)) {
+				if (can_cast_type<unsignedbv_typet>(rh.op0().type())
+						&& can_cast_type<unsignedbv_typet>(rh.op1().type()))
+					bl->make_assumption(and_exprt(binary_relation_exprt(rh,
+							ID_ge,
+							rh.op1()),
+							(binary_relation_exprt(rh, ID_ge, rh.op0()))));
+				else if (can_cast_type<signedbv_typet>(rh.op0().type())
+						&& can_cast_type<signedbv_typet>(rh.op1().type())) {
+					auto zero_expr = from_integer(0, rh.type());
+					bl->make_assumption(and_exprt(implies_exprt(and_exprt(binary_relation_exprt(rh.op0(),
+							ID_ge,
+							zero_expr),
+							(binary_relation_exprt(rh.op1(), ID_ge, zero_expr))),
+							binary_relation_exprt(rh, ID_ge, zero_expr)),
+							implies_exprt(and_exprt(binary_relation_exprt(rh.op0(),
+									ID_lt,
+									zero_expr),
+									(binary_relation_exprt(rh.op1(),
+											ID_lt,
+											zero_expr))),
+									binary_relation_exprt(rh,
+											ID_lt,
+											zero_expr))));
+				}
+				else
+					assert(false && "Unhandled overflow type!");
+			}
+			else
+				bl->make_assumption(binary_relation_exprt(rh,
+						ID_le,
+						from_integer(max, rh.type())));
+		}
+	}
+}
+
 void acceleratort::add_overflow_checks(goto_programt &g_p) {
 	for (auto start = g_p.instructions.begin(), end = g_p.instructions.end();
 			start != end; start++) {
-//		if (start->is_assume()) {
-////			auto x = to_code_assign(start->code);
-//			auto rh = start->guard;
-//			std::vector<exprt> que;
-//			que.push_back(rh);
-//			//std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
-//			while (!que.empty()) {
-//				rh = que.back();
-//				que.pop_back();
-//				auto bl = g_p.insert_before(start);
-//				bl->make_skip();
-//				for (auto op : rh.operands())
-//					que.push_back(op);
-//				mp_integer max;
-//				if (can_cast_type<unsignedbv_typet>(rh.type()))
-//					max = to_unsignedbv_type(rh.type()).largest();
-//				else if (can_cast_type<signedbv_typet>(rh.type()))
-//					max = to_signedbv_type(rh.type()).largest();
-//				else
-//					max = string2integer(std::to_string(INT_MAX));
-//				if (rh.type().id() == ID_bool) continue;
-//				if (rh.operands().size() > 1) {
-//					if (can_cast_expr<mult_exprt>(rh)) {
-//						bl->make_assumption(binary_relation_exprt(rh.op0(),
-//								ID_le,
-//								div_exprt(from_integer(max, rh.type()),
-//										rh.op1())));
-//					}
-////					else if (can_cast_expr<plus_exprt>(rh)) {
-////						bl->make_assumption(binary_relation_exprt(rh.op0(),
-////								ID_le,
-////								minus_exprt(from_integer(max, rh.type()),
-////										rh.op1())));
-////					}
-////					else if (can_cast_expr<minus_exprt>(rh)) {
-////						bl->make_assumption(binary_relation_exprt(rh.op0(),
-////								ID_le,
-////								plus_exprt(from_integer(max, rh.type()),
-////										rh.op1())));
-////					}
-//					else
-//						bl->make_assumption(binary_relation_exprt(rh,
-//								ID_le,
-//								from_integer(max, rh.type())));
-//				}
-//			}
-//		} // for loop
+		if (start->is_assume()) {
+			auto rh = start->guard;
+			auto hoist_loc = g_p.insert_before(start);
+			hoist_loc->make_skip();
+			add_overflow_assumes(g_p, hoist_loc, rh);
+		} // for loop
 		if (start->is_assign()) {
 			auto x = to_code_assign(start->code);
 			auto rh = x.rhs();
-			std::vector<exprt> que;
-			que.push_back(rh);
-			//std::cout<<"Rhs: " << from_expr(x.rhs())<<std::endl;
-			while (!que.empty()) {
-				rh = que.back();
-				que.pop_back();
-				auto bl = g_p.insert_before(start);
-				bl->make_skip();
-				mp_integer max;
-				if (can_cast_type<unsignedbv_typet>(rh.type()))
-					max = to_unsignedbv_type(rh.type()).largest();
-				else if (can_cast_type<signedbv_typet>(rh.type()))
-					max = to_signedbv_type(rh.type()).largest();
-				else
-					max = string2integer(std::to_string(INT_MAX));
-				if (rh.operands().size() > 1) {
-					if (can_cast_expr<mult_exprt>(rh)) {
-						if (can_cast_expr<symbol_exprt>(rh.op1()))
-							bl->make_assumption(binary_relation_exprt(rh.op1(),
-									ID_le,
-									div_exprt(from_integer(max, rh.type()),
-											rh.op0())));
-						else
-							bl->make_assumption(binary_relation_exprt(rh.op0(),
-									ID_le,
-									div_exprt(from_integer(max, rh.type()),
-											rh.op1())));
-					}
-					else if (can_cast_expr<plus_exprt>(rh)) {
-						bl->make_assumption(binary_relation_exprt(rh.op0(),
-								ID_le,
-								minus_exprt(from_integer(max, rh.type()),
-										rh.op1())));
-					}
-//					else if (can_cast_expr<minus_exprt>(rh)) {
-//						bl->make_assumption(binary_relation_exprt(rh.op0(),
-//								ID_le,
-//								plus_exprt(from_integer(max, rh.type()),
-//										rh.op1())));
-//					}
-					else
-						bl->make_assumption(binary_relation_exprt(rh,
-								ID_le,
-								from_integer(max, rh.type())));
-				}
-				for (auto op : rh.operands())
-					que.push_back(op);
-			}
-		} // for loop
+			auto hoist_loc = g_p.insert_before(start);
+			hoist_loc->make_skip();
+			add_overflow_assumes(g_p, hoist_loc, rh);
+		}
 	}
 	remove_skip(g_p);
 	g_p.update();
@@ -355,6 +332,9 @@ void acceleratort::swap_all(exprt &l_c, const exprt &n_e, const exprt &j_e) {
 		if (op == n_e) {
 			op = j_e;
 		}
+	}
+	if (l_c == n_e) {
+		l_c = j_e;
 	}
 }
 
@@ -506,8 +486,13 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		g_p_c.update();
 	}
 	for (auto &i : g_p_c.instructions) {
-		if (i.is_assign()) for (auto t : hoist_tgt) {
-			swap_all(i.code.op1(), t.first, t.second);
+		if (i.is_assign()) {
+			cout << "Swapping" << from_expr(i.code) << endl;
+			for (auto t : hoist_tgt) {
+				if (i.code.op0() != t.second)
+					swap_all(i.code.op1(), t.first, t.second);
+
+			}
 		}
 	}
 	for (auto a : last_asgn) {
@@ -622,18 +607,27 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 					}
 				}
 			}
+			auto n_asgn = path.insert_before(path.instructions.begin());
+			n_asgn->make_assignment();
+			n_asgn->code = code_assignt(n_exp,
+					side_effect_expr_nondett(n_exp.type(),
+							n_asgn->source_location));
+			auto n_ge_1 = path.insert_after(n_asgn);
+			n_ge_1->make_assumption(binary_relation_exprt(n_exp,
+					ID_ge,
+					from_integer(1, n_exp.type())));
 			augment_path(split_loc, functions, path);
 		}
 	}
 	cout << "Accelerated " << no_paths_accelerated << " paths." << endl;
-	auto n_asgn = functions.insert_before(functions.instructions.begin());
-	n_asgn->make_assignment();
-	n_asgn->code = code_assignt(n_exp,
-			side_effect_expr_nondett(n_exp.type(), n_asgn->source_location));
-	auto n_ge_1 = functions.insert_after(n_asgn);
-	n_ge_1->make_assumption(binary_relation_exprt(n_exp,
-			ID_ge,
-			from_integer(1, n_exp.type())));
+//	auto n_asgn = functions.insert_before(functions.instructions.begin());
+//	n_asgn->make_assignment();
+//	n_asgn->code = code_assignt(n_exp,
+//			side_effect_expr_nondett(n_exp.type(), n_asgn->source_location));
+//	auto n_ge_1 = functions.insert_after(n_asgn);
+//	n_ge_1->make_assumption(binary_relation_exprt(n_exp,
+//			ID_ge,
+//			from_integer(1, n_exp.type())));
 }
 
 void acceleratort::accelerate_all_loops(goto_programt &goto_function) {

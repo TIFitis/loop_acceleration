@@ -123,7 +123,7 @@ std::string z3_parse::add_symex(const goto_programt::instructionst &assign_insts
 			loop_acc::acceleratort::swap_all(rhs_e, sym, ip_val);
 		}
 		auto lhs = from_expr(ins_c.lhs());
-		lhs = "acc_" + eq_n_str + std::to_string(ssa_count) + lhs;
+		lhs = "__acc_" + eq_n_str + std::to_string(ssa_count) + lhs;
 		ssa_count++;
 		auto n_lhs_sym = loop_acc::acceleratort::create_symbol(lhs,
 				ins_c.lhs().type(),
@@ -248,6 +248,7 @@ std::map<std::string, int> z3_parse::get_z3_model(std::string filename) {
 	fclose(fp);
 	std::map<std::string, int> values;
 	if (raw_input.find("unsat") != raw_input.npos) return values;
+	if (raw_input.find("error") != raw_input.npos) return values;
 
 	while (1) {
 		auto loc = raw_input.find("(");

@@ -10,9 +10,9 @@
 #ifndef ACCELERATOR_H_
 #define ACCELERATOR_H_
 
-#define ACC_N "acc_n"
-#define ACC_J "acc_j"
-#define ACC_P "acc_p"
+#define ACC_N "__acc_n"
+#define ACC_J "__acc_j"
+#define ACC_P "__acc_p"
 
 typedef std::set<exprt> exprst;
 
