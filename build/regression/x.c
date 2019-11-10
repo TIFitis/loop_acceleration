@@ -9,7 +9,7 @@ int main(){
 
     int i = 0;
     int buflen = 100;
-    while(i <= 3){
+    while(i <= 50){
         char c;
         if(c){
             i+=2;

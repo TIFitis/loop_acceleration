@@ -418,7 +418,7 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 
 bool acceleratort::constraint_solver(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
-		exprt loop_cond,
+		exprt &loop_cond,
 		goto_programt::targett sink) {
 	goto_programt g_p_c;
 	g_p_c.copy_from(g_p);
@@ -498,7 +498,8 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	for (auto a : last_asgn) {
 		swap_all(loop_cond, a.first, a.second);
 	}
-	swap_all(loop_cond,
+	exprt loop_cond_dup = loop_cond;
+	swap_all(loop_cond_dup,
 			n_exp,
 			minus_exprt(n_exp, from_integer(1, n_exp.type())));
 	goto_programt::targett si = g_p_c.instructions.begin();
@@ -507,7 +508,9 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		it++;
 		if (it != it_e) si++;
 	}
-	precondition(g_p_c, hoist_loc, si, loop_cond);
+	auto post_cond = g_p_c.insert_after(hoist_loc);
+	post_cond->make_assumption(not_exprt(loop_cond));
+	precondition(g_p_c, hoist_loc, si, loop_cond_dup);
 	g_p_c.update();
 	g_p.copy_from(g_p_c);
 	add_overflow_checks(g_p);
@@ -596,12 +599,13 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 					path_loop_header = it;
 					break;
 				}
-			for (auto &i : path.instructions) {
-				if (i.is_goto()) {
-					for (auto &t : i.targets) {
+			for (auto i = path.instructions.begin(), e =
+					path.instructions.end(); i != e; i++) {
+				if (i->is_goto()) {
+					for (auto &t : i->targets) {
 						if (t == path_loop_header) {
-							i.targets.clear();
-							i.targets.push_back(end);
+							i->targets.clear();
+							i->targets.push_back(end);
 							break;
 						}
 					}

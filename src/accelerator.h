@@ -48,7 +48,7 @@ class loop_acc::acceleratort {
 			goto_programt::targett sink);
 	bool constraint_solver(goto_programt &g_p,
 			goto_programt::instructionst &assign_insts,
-			exprt loop_cond,
+			exprt &loop_cond,
 			goto_programt::targett sink);
 	void generate_paths(goto_programt &dup_body,
 			goto_programt::targetst &branches,
