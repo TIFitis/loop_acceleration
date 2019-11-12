@@ -234,10 +234,15 @@ void add_overflow_assumes(goto_programt &g_p,
 	bl->make_skip();
 	loc = bl;
 	mp_integer max;
-	if (can_cast_type<unsignedbv_typet>(rh.type()))
+	mp_integer min;
+	if (can_cast_type<unsignedbv_typet>(rh.type())) {
 		max = to_unsignedbv_type(rh.type()).largest();
-	else if (can_cast_type<signedbv_typet>(rh.type()))
+		min = to_unsignedbv_type(rh.type()).smallest();
+	}
+	else if (can_cast_type<signedbv_typet>(rh.type())) {
 		max = to_signedbv_type(rh.type()).largest();
+		min = to_signedbv_type(rh.type()).smallest();
+	}
 	else if (rh.type().id() == ID_bool)
 		return;
 	else
@@ -245,8 +250,13 @@ void add_overflow_assumes(goto_programt &g_p,
 	if (rh.operands().size() > 1) {
 		if (can_cast_expr<mult_exprt>(rh)) {
 			bl->make_assumption(binary_relation_exprt(rh.op0(),
-					ID_le,
+					ID_lt,
 					div_exprt(from_integer(max, rh.type()), rh.op1())));
+			bl = g_p.insert_after(bl);
+			bl->make_assumption(binary_relation_exprt(rh.op0(),
+					ID_gt,
+					div_exprt(from_integer(min, rh.type()), rh.op1())));
+			loc = bl;
 		}
 		else {
 			if (can_cast_expr<minus_exprt>(rh))
@@ -255,17 +265,17 @@ void add_overflow_assumes(goto_programt &g_p,
 				if (can_cast_type<unsignedbv_typet>(rh.op0().type())
 						&& can_cast_type<unsignedbv_typet>(rh.op1().type()))
 					bl->make_assumption(and_exprt(binary_relation_exprt(rh,
-							ID_ge,
+							ID_gt,
 							rh.op1()),
-							(binary_relation_exprt(rh, ID_ge, rh.op0()))));
+							(binary_relation_exprt(rh, ID_gt, rh.op0()))));
 				else if (can_cast_type<signedbv_typet>(rh.op0().type())
 						&& can_cast_type<signedbv_typet>(rh.op1().type())) {
 					auto zero_expr = from_integer(0, rh.type());
 					bl->make_assumption(and_exprt(implies_exprt(and_exprt(binary_relation_exprt(rh.op0(),
-							ID_ge,
+							ID_gt,
 							zero_expr),
-							(binary_relation_exprt(rh.op1(), ID_ge, zero_expr))),
-							binary_relation_exprt(rh, ID_ge, zero_expr)),
+							(binary_relation_exprt(rh.op1(), ID_gt, zero_expr))),
+							binary_relation_exprt(rh, ID_gt, zero_expr)),
 							implies_exprt(and_exprt(binary_relation_exprt(rh.op0(),
 									ID_lt,
 									zero_expr),
@@ -279,10 +289,16 @@ void add_overflow_assumes(goto_programt &g_p,
 				else
 					assert(false && "Unhandled overflow type!");
 			}
-			else
+			else {
 				bl->make_assumption(binary_relation_exprt(rh,
-						ID_le,
+						ID_lt,
 						from_integer(max, rh.type())));
+				bl = g_p.insert_after(bl);
+				bl->make_assumption(binary_relation_exprt(rh,
+						ID_gt,
+						from_integer(min, rh.type())));
+				loc = bl;
+			}
 		}
 	}
 }

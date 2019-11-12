@@ -11,6 +11,6 @@ int main(){
         i--;
         n2++;
     }
-    assert(n1 != n2);
+    assert(n1 == n2);
     return 0;
 }
