@@ -119,6 +119,25 @@ set<goto_programt*>& acceleratort::create_dup_loop(const goto_programt::targett 
 		}
 	}
 	remove_skip(dup_body);
+	exprst loop_vars;
+	for (auto a : dup_body.instructions) {
+		if (a.is_assign()) {
+			gather_syms(a.code.op0(), loop_vars);
+		}
+	}
+	set<goto_programt*> &paths = *new set<goto_programt*>();
+	for (auto a : branches) {
+		exprst temp;
+		gather_syms(a->guard, temp);
+		for (auto b : temp) {
+			if (loop_vars.find(b) != loop_vars.end()) {
+				cout << "LoopBody has non_invariant loop_cond" << endl;
+				paths.clear();
+				return paths;
+			}
+		}
+	}
+
 	map<goto_programt::targett, unsigned> path_explored;
 #if DBGLEVEL >= 3
 	if(!branches.empty())
@@ -130,7 +149,6 @@ set<goto_programt*>& acceleratort::create_dup_loop(const goto_programt::targett 
 	if(!branches.empty())
 		cout << "========branches==========" << endl;
 #endif
-	set<goto_programt*> &paths = *new set<goto_programt*>();
 	generate_paths(dup_body, branches, branches.begin(), path_explored, paths);
 
 #if DBGLEVEL >= 2
@@ -524,8 +542,6 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		it++;
 		if (it != it_e) si++;
 	}
-	auto post_cond = g_p_c.insert_after(hoist_loc);
-	post_cond->make_assumption(not_exprt(loop_cond));
 	precondition(g_p_c, hoist_loc, si, loop_cond_dup);
 	g_p_c.update();
 	g_p.copy_from(g_p_c);
@@ -533,6 +549,27 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	g_p.update();
 	assign_insts = assign_insts_c;
 	return true;
+}
+
+void fix_goto_exit(goto_programt &g_p, const goto_programt::targett &end) {
+	goto_programt::targett path_loop_header;
+	for (auto it = g_p.instructions.begin();; it++)
+		if (it->is_goto()) {
+			path_loop_header = it;
+			break;
+		}
+	for (auto i = g_p.instructions.begin(), e = g_p.instructions.end(); i != e;
+			i++) {
+		if (i->is_goto()) {
+			for (auto &t : i->targets) {
+				if (t == path_loop_header) {
+					i->targets.clear();
+					i->targets.push_back(end);
+					break;
+				}
+			}
+		}
+	}
 }
 
 void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
@@ -558,6 +595,7 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 	auto end = loop_header->get_target();
 	unsigned no_paths_accelerated = 0;
 	for (auto path_ptr : paths) {
+
 		exprt loop_cond = loop_cond_o;
 		auto &path = *path_ptr;
 		auto path_loop_header = path.instructions.begin();
@@ -610,23 +648,6 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 			cout << "ConstraintSolving accelerated :: " << endl;
 #endif
 			no_paths_accelerated++;
-			for (auto it = path.instructions.begin();; it++)
-				if (it->is_goto()) {
-					path_loop_header = it;
-					break;
-				}
-			for (auto i = path.instructions.begin(), e =
-					path.instructions.end(); i != e; i++) {
-				if (i->is_goto()) {
-					for (auto &t : i->targets) {
-						if (t == path_loop_header) {
-							i->targets.clear();
-							i->targets.push_back(end);
-							break;
-						}
-					}
-				}
-			}
 			auto n_asgn = path.insert_before(path.instructions.begin());
 			n_asgn->make_assignment();
 			n_asgn->code = code_assignt(n_exp,
@@ -636,6 +657,24 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 			n_ge_1->make_assumption(binary_relation_exprt(n_exp,
 					ID_ge,
 					from_integer(1, n_exp.type())));
+			path.update();
+			goto_programt no_post_path;
+			no_post_path.copy_from(path);
+			auto false_sink = no_post_path.add_instruction();
+			false_sink->make_assumption(false_exprt());
+			no_post_path.update();
+			fix_goto_exit(no_post_path, false_sink);
+			augment_path(split_loc, functions, no_post_path);
+
+			for (auto it = path.instructions.begin();; it++)
+				if (it->is_goto()) {
+					path_loop_header = it;
+					break;
+				}
+			auto post_cond = path.insert_before(path_loop_header);
+			post_cond->make_assumption(not_exprt(loop_cond));
+			path.update();
+			fix_goto_exit(path, end);
 			augment_path(split_loc, functions, path);
 		}
 	}
