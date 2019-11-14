@@ -45,6 +45,8 @@ void acceleratort::generate_paths(goto_programt &dup_body,
 					continue;
 				}
 				if (path_explored[tgt_it] == 1) {
+					auto branch_assum = path.insert_before(path_it);
+					branch_assum->make_assumption(tgt_it->guard);
 					for (auto it_new = path_it, new_it_end =
 							path_it->get_target(); it_new != new_it_end;
 							it_new++, tgt_it++, path_it++) {
@@ -55,11 +57,14 @@ void acceleratort::generate_paths(goto_programt &dup_body,
 					continue;
 				}
 				else if (path_explored[tgt_it] == 2) {
+					auto branch_assum = path.insert_before(path_it);
+					branch_assum->make_assumption(not_exprt(tgt_it->guard));
 					path_it->make_skip();
 					continue;
 				}
 			}
 		}
+		path.update();
 		remove_skip(path);
 		paths.insert(&path);
 		return;
@@ -150,7 +155,22 @@ set<goto_programt*>& acceleratort::create_dup_loop(const goto_programt::targett 
 		cout << "========branches==========" << endl;
 #endif
 	generate_paths(dup_body, branches, branches.begin(), path_explored, paths);
-
+	map<string, goto_programt*> rem_duplicates;
+	for (auto a : paths) {
+		string s;
+		stringstream *temp = new stringstream(s);
+		temp->str();
+		a->output(*temp);
+		if (rem_duplicates.find(temp->str()) != rem_duplicates.end()) {
+			delete a;
+		}
+		else
+			rem_duplicates[temp->str()] = a;
+	}
+	paths.clear();
+	for (auto &a : rem_duplicates) {
+		paths.insert(a.second);
+	}
 #if DBGLEVEL >= 2
 	cout << paths.size() << " paths generated!" << endl;
 #endif
