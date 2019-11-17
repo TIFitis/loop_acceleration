@@ -23,7 +23,10 @@ std::string z3_parse::generate_arith(exprt expr,
 			s.append(from_expr(expr));
 	}
 	else if (can_cast_expr<constant_exprt>(expr)) {
-		s.append(from_expr(expr));
+		auto const_expr = to_constant_expr(expr);
+		std::ostringstream str1;
+		str1 << string2integer(const_expr.get_value().c_str(), 16);
+		s.append(str1.str());
 	}
 	else if (can_cast_expr<plus_exprt>(expr)) {
 		auto plus_expr = to_plus_expr(expr);
@@ -47,6 +50,11 @@ std::string z3_parse::generate_arith(exprt expr,
 		auto mult_expr = to_div_expr(expr);
 		s.append("(/ " + generate_arith(mult_expr.op0(), s1, s2) + " "
 				+ generate_arith(mult_expr.op1(), s1, s2) + ")");
+
+	}
+	else if (can_cast_expr<typecast_exprt>(expr)) {
+		auto cast_expr = to_typecast_expr(expr);
+		s.append(generate_arith(cast_expr.op0(), s1, s2));
 
 	}
 	else {
@@ -286,26 +294,24 @@ exprt z3_parse::getAccFunc(const std::map<std::string, int> &coeff_vals,
 		r_map.push_back(e);
 	}
 	auto x = coeff_vals.at("alpha_" + std::to_string(1));
-	exprt expr = mult_exprt(from_integer(x, signedbv_typet(32)), r_map[0]);
+	exprt expr = mult_exprt(from_integer(x, r_map[0].type()), r_map[0]);
 	auto k = input_set[0].size() - 1;
 	for (auto i = 2u; i <= k; i++) {
 		auto x = coeff_vals.at("alpha_" + std::to_string(i));
 		expr = plus_exprt(expr,
-				mult_exprt(from_integer(x, signedbv_typet(32)), r_map[i - 1]));
+				mult_exprt(from_integer(x, r_map[i - 1].type()), r_map[i - 1]));
 	}
 	for (auto i = 1u; i <= k; i++) {
 		auto x = coeff_vals.at("alpha_" + std::to_string(i + k));
 		expr = plus_exprt(expr,
-				mult_exprt(mult_exprt(from_integer(x, signedbv_typet(32)),
+				mult_exprt(mult_exprt(from_integer(x, r_map[i - 1].type()),
 						r_map[i - 1]),
 						n_e));
 	}
 	x = coeff_vals.at("alpha_" + std::to_string(2 * k + 1));
-	expr = plus_exprt(expr,
-			mult_exprt(from_integer(x, signedbv_typet(32)), n_e));
+	expr = plus_exprt(expr, mult_exprt(from_integer(x, n_e.type()), n_e));
 	x = coeff_vals.at("alpha_" + std::to_string(2 * k + 2));
 	expr = plus_exprt(expr,
-			mult_exprt(mult_exprt(from_integer(x, signedbv_typet(32)), n_e),
-					n_e));
+			mult_exprt(mult_exprt(from_integer(x, n_e.type()), n_e), n_e));
 	return expr;
 }

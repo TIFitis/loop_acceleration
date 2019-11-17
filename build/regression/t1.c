@@ -13,5 +13,6 @@ int main(){
         i+=2;
         assert(i <= buflen);
     }
+    assert(0);
     return 0;
 }

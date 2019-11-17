@@ -283,8 +283,12 @@ void add_overflow_assumes(goto_programt &g_p,
 	}
 	else if (rh.type().id() == ID_bool)
 		return;
-	else
+	else {
+		cerr << from_expr(rh) << endl;
+		cerr << rh.type().id().c_str() << endl;
 		assert(false && "Unhandled overflow type!");
+	}
+
 	if (rh.operands().size() > 1) {
 		if (can_cast_expr<mult_exprt>(rh)) {
 			bl->make_assumption(binary_relation_exprt(rh.op0(),
@@ -324,8 +328,11 @@ void add_overflow_assumes(goto_programt &g_p,
 											ID_lt,
 											zero_expr))));
 				}
-				else
+				else {
+					cerr << from_expr(rh) << endl;
+					cerr << rh.type().id().c_str() << endl;
 					assert(false && "Unhandled overflow type!");
+				}
 			}
 			else {
 				bl->make_assumption(binary_relation_exprt(rh,
@@ -604,10 +611,10 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 			loop_cond_o = not_exprt(loop_header->guard);
 	}
 	auto split_loc = loop_header;
-	auto n_sym = create_symbol(ACC_N, signedbv_typet(32), true);
+	auto n_sym = create_symbol(ACC_N, unsignedbv_typet(32), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();
-	auto j_sym = create_symbol(ACC_J, signedbv_typet(32), true);
+	auto j_sym = create_symbol(ACC_J, unsignedbv_typet(32), true);
 	goto_model.symbol_table.insert(j_sym);
 	auto j_exp = j_sym.symbol_expr();
 	auto p_sym = create_symbol(ACC_P, bool_typet(), true);

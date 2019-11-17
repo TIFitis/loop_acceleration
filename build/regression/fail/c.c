@@ -4,7 +4,7 @@ int main(){
     int buflen = 100;
     int n1 = 0, n2 = 0;
     while(i<buflen){
-        i = i + 10;
+        i = i + 2;
         n1++;
     }
     while(i > 0){

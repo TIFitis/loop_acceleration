@@ -9,18 +9,15 @@ int main(){
 
     int i = 0;
     int buflen = 100;
+    char c;
     while(i <= 50){
-        char c;
         if(c){
             i+=2;
-            if(i){
-                i+=3;
-            }
-            else {
+            if(buflen > 30){
                 i+=4;
             }
         }
-        if(c){
+        else{
             i+=5;
         }
         assert(i <= buflen);

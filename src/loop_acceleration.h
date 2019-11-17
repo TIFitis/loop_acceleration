@@ -12,6 +12,7 @@
 #include <list>
 #include <map>
 #include <algorithm>
+#include <strstream>
 
 #include <climits>
 

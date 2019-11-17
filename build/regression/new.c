@@ -4,7 +4,7 @@ int main(){
     int buflen = 100;
     int j = 1;
     while(i<5){
-        i+=2;
+        i+=4;
         j+=i;
         assert(j <= buflen);
     }
