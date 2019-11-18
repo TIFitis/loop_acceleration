@@ -17,6 +17,7 @@
 #include <climits>
 
 #include <analyses/natural_loops.h>
+#include <analyses/goto_check.h>
 #include <ansi-c/ansi_c_language.h>
 #include <cpp/cpp_language.h>
 #include <goto-programs/goto_model.h>
@@ -41,6 +42,7 @@
 #include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/options.h>
 
 #ifndef LOOP_ACCELERATION_H_
 #define LOOP_ACCELERATION_H_

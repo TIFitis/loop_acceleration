@@ -266,7 +266,7 @@ bool acceleratort::check_pattern(code_assignt &inst_c, exprt n_e) {
 void add_overflow_assumes(goto_programt &g_p,
 		goto_programt::targett &loc,
 		exprt rh) {
-	if (rh.operands().size() > 1) for (auto op : rh.operands())
+	if (rh.operands().size() >= 1) for (auto op : rh.operands())
 		add_overflow_assumes(g_p, loc, op);
 	auto bl = g_p.insert_after(loc);
 	bl->make_skip();
@@ -355,14 +355,14 @@ void acceleratort::add_overflow_checks(goto_programt &g_p) {
 			auto rh = start->guard;
 			auto hoist_loc = g_p.insert_before(start);
 			hoist_loc->make_skip();
-			add_overflow_assumes(g_p, hoist_loc, rh);
+//			add_overflow_assumes(g_p, hoist_loc, rh);
 		} // for loop
 		if (start->is_assign()) {
 			auto x = to_code_assign(start->code);
 			auto rh = x.rhs();
 			auto hoist_loc = g_p.insert_before(start);
 			hoist_loc->make_skip();
-			add_overflow_assumes(g_p, hoist_loc, rh);
+//			add_overflow_assumes(g_p, hoist_loc, rh);
 		}
 	}
 	remove_skip(g_p);
@@ -477,6 +477,18 @@ bool acceleratort::syntactic_matching(goto_programt &g_p,
 	return true;
 }
 
+void sanitize_types(exprt &expr) {
+	if (expr.operands().size() > 1) {
+//		for (auto e : expr.operands()) {
+		sanitize_types(expr.op0());
+		sanitize_types(expr.op1());
+		expr.op0() = typecast_exprt::conditional_cast(expr.op0(),
+				expr.op1().type());
+		expr.type() = expr.op1().type();
+//		}
+	}
+}
+
 bool acceleratort::constraint_solver(goto_programt &g_p,
 		goto_programt::instructionst &assign_insts,
 		exprt &loop_cond,
@@ -485,7 +497,7 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	g_p_c.copy_from(g_p);
 	goto_programt::instructionst assign_insts_c = assign_insts;
 	exprt n_exp = goto_model.symbol_table.lookup(ACC_N)->symbol_expr();
-	exprt j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
+//	exprt j_exp = goto_model.symbol_table.lookup(ACC_J)->symbol_expr();
 	exprst loop_vars;
 	for (auto inst : assign_insts_c) {
 		gather_syms(inst.code.op0(), loop_vars);
@@ -516,7 +528,6 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		exprst src_syms, visited_syms;
 		get_all_sources(tgt, assign_insts_c, src_syms, visited_syms);
 		if (find(src_syms.begin(), src_syms.end(), tgt) == src_syms.end()) {
-			cout << "Skipping : " << from_expr(inst.code) << endl;
 			continue;
 		}
 		z3_parse parser { };
@@ -539,6 +550,9 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 		cout << "\n\nSimplified expr:\n" << from_expr(accelerated_func) << endl;
 #endif
 //		swap_all(accelerated_func, tgt, hoist_tgt[tgt]);
+		sanitize_types(accelerated_func);
+		accelerated_func = typecast_exprt::conditional_cast(accelerated_func,
+				inst_code.lhs().type());
 		inst_code.rhs() = accelerated_func;
 		last_asgn[tgt] = inst_code.rhs();
 		auto x = g_p_c.instructions.begin();
@@ -548,7 +562,6 @@ bool acceleratort::constraint_solver(goto_programt &g_p,
 	}
 	for (auto &i : g_p_c.instructions) {
 		if (i.is_assign()) {
-			cout << "Swapping" << from_expr(i.code) << endl;
 			for (auto t : hoist_tgt) {
 				if (i.code.op0() != t.second)
 					swap_all(i.code.op1(), t.first, t.second);
@@ -614,11 +627,11 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 	auto n_sym = create_symbol(ACC_N, unsignedbv_typet(32), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();
-	auto j_sym = create_symbol(ACC_J, unsignedbv_typet(32), true);
-	goto_model.symbol_table.insert(j_sym);
-	auto j_exp = j_sym.symbol_expr();
-	auto p_sym = create_symbol(ACC_P, bool_typet(), true);
-	goto_model.symbol_table.insert(p_sym);
+//	auto j_sym = create_symbol(ACC_J, unsignedbv_typet(32), true);
+//	goto_model.symbol_table.insert(j_sym);
+//	auto j_exp = j_sym.symbol_expr();
+//	auto p_sym = create_symbol(ACC_P, bool_typet(), true);
+//	goto_model.symbol_table.insert(p_sym);
 	auto end = loop_header->get_target();
 	unsigned no_paths_accelerated = 0;
 	for (auto path_ptr : paths) {
@@ -730,6 +743,26 @@ void acceleratort::accelerate_all_functions() {
 	}
 }
 
+void acceleratort::sanitize_overflow() {
+	Forall_goto_functions(it, goto_model.goto_functions)
+	{
+		for (auto &a : it->second.body.instructions) {
+			if (a.is_assert()) {
+				auto g = a.guard;
+				string str = from_expr(g);
+				if (str.find("!overflow") != str.npos) {
+					cout << from_expr(g) << "is OVERFLOW" << endl;
+					a.make_skip();
+					a.make_assumption(g);
+				}
+				else {
+					cout << from_expr(g) << "ISNT OVERFLOW" << endl;
+				}
+			}
+		}
+	}
+}
+
 bool acceleratort::accelerate() {
 	register_language(new_ansi_c_language);
 	register_language(new_cpp_language);
@@ -744,5 +777,11 @@ bool acceleratort::accelerate() {
 //	remove_calls_no_body(goto_model.goto_functions);
 	get_loops();
 	accelerate_all_functions();
+	optionst options;
+	goto_model.goto_functions.update();
+	options.set_option("signed-overflow-check", 1);
+	options.set_option("unsigned-overflow-check", 1);
+	goto_check(options, goto_model);
+	sanitize_overflow();
 	return false;
 }

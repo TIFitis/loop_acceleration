@@ -21,6 +21,7 @@ class loop_acc::acceleratort {
 	std::map<goto_programt*, natural_loops_mutablet*> loops;
 
 	void accelerate_all_functions();
+	void sanitize_overflow();
 	void accelerate_all_loops(goto_programt&);
 	void accelerate_loop(const goto_programt::targett&,
 			natural_loops_mutablet::natural_loopt&,
