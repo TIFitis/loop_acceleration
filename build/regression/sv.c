@@ -6,5 +6,5 @@ int main(void) {
     x = 0;
     y++;
   }
-  __CPROVER_assert(0, "Fail");
+  assert(x==1);
 }

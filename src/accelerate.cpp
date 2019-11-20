@@ -130,7 +130,30 @@ set<goto_programt*>& acceleratort::create_dup_loop(const goto_programt::targett 
 			gather_syms(a.code.op0(), loop_vars);
 		}
 	}
+
 	set<goto_programt*> &paths = *new set<goto_programt*>();
+	exprst loop_cond_syms;
+	exprt loop_cond;
+	if (loop_header->is_goto()) {
+		if (can_cast_expr<not_exprt>(loop_header->guard))
+			loop_cond = to_not_expr(loop_header->guard).op0();
+		else
+			loop_cond = not_exprt(loop_header->guard);
+	}
+	gather_syms(loop_cond, loop_cond_syms);
+	int no_of_variants = 0;
+	for (auto a : loop_cond_syms) {
+		if (loop_vars.find(a) != loop_vars.end()) {
+			no_of_variants++;
+			if (no_of_variants > 1) {
+				cout << from_expr(loop_cond)
+						<< " :: loop condition has more than 1, non invariant.\n"
+						<< endl;
+				paths.clear();
+				return paths;
+			}
+		}
+	}
 	for (auto a : branches) {
 		exprst temp;
 		gather_syms(a->guard, temp);
@@ -624,7 +647,7 @@ void acceleratort::accelerate_loop(const goto_programt::targett &loop_header,
 			loop_cond_o = not_exprt(loop_header->guard);
 	}
 	auto split_loc = loop_header;
-	auto n_sym = create_symbol(ACC_N, unsignedbv_typet(32), true);
+	auto n_sym = create_symbol(ACC_N, signedbv_typet(64), true);
 	goto_model.symbol_table.insert(n_sym);
 	auto n_exp = n_sym.symbol_expr();
 //	auto j_sym = create_symbol(ACC_J, unsignedbv_typet(32), true);
@@ -751,7 +774,7 @@ void acceleratort::sanitize_overflow() {
 				auto g = a.guard;
 				string str = from_expr(g);
 				if (str.find("!overflow") != str.npos) {
-					cout << from_expr(g) << "is OVERFLOW" << endl;
+					cout << from_expr(g) << "IS OVERFLOW" << endl;
 					a.make_skip();
 					a.make_assumption(g);
 				}
@@ -781,7 +804,11 @@ bool acceleratort::accelerate() {
 	goto_model.goto_functions.update();
 	options.set_option("signed-overflow-check", 1);
 	options.set_option("unsigned-overflow-check", 1);
+	options.set_option("assertions", 1);
+	options.set_option("assumptions", 1);
+//	goto_model.
 	goto_check(options, goto_model);
+	goto_model.goto_functions.update();
 	sanitize_overflow();
 	return false;
 }
